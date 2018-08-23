@@ -31,7 +31,7 @@ def load_openai_weights(model, directory, n_special_tokens=0):
 
     parameters_names_path = os.path.join(directory, 'parameters_names.json')
     parameters_shapes_path = os.path.join(directory, 'parameters_shapes.json')
-    parameters_weights_paths = [os.path.join(directory, f'params_{n}.npy') for n in range(10)]
+    parameters_weights_paths = [os.path.join(directory, 'params_{}.npy'.format(n)) for n in range(10)]
 
     with open(parameters_names_path, 'r') as parameters_names_file:
         parameters_names = json.load(parameters_names_file)

@@ -32,10 +32,10 @@ class MultiheadAttention(nn.Module):
 
     def _init_weights(self):
         nn.init.normal_(self.qkv_proj.weight, std=0.02)
-        nn.init.normal_(self.proj.weight, std=0.02)
+        nn.init.normal_(self.out_proj.weight, std=0.02)
 
     def _split_heads(self, x, is_key=False):
-        x = x.view(*x.shape[:-1], self.n_heads, self.n_features // self.n_head)
+        x = x.view(x.shape[0], x.shape[1], self.n_heads, self.n_features // self.n_head)
         x = x.permute(0, 2, 3, 1) if is_key else x.permute(0, 2, 1, 3)
 
         return x
@@ -58,7 +58,7 @@ class MultiheadAttention(nn.Module):
 
     def _merge_heads(self, x):
         x = x.permute(0, 2, 1, 3).contiguous()
-        x = x.view(*x.shape[:-2], self.n_features)
+        x = x.view(x.shape[0], x.shape[1], self.n_features)
 
         return x
 
@@ -85,20 +85,20 @@ class FeedForward(nn.Module):
     def __init__(self, in_features, middle_features, dropout):
         super(FeedForward, self).__init__()
 
-        self.layer1 = nn.Linear(in_features, middle_features)
-        self.layer2 = nn.Linear(middle_features, in_features)
+        self.layer_1 = nn.Linear(in_features, middle_features)
+        self.layer_2 = nn.Linear(middle_features, in_features)
         self.dropout = nn.Dropout(dropout)
 
         self._init_weights()
 
     def _init_weights(self):
-        nn.init.normal_(self.layer1.weight, std=0.02)
-        nn.init.normal_(self.layer2.weight, std=0.02)
+        nn.init.normal_(self.layer_1.weight, std=0.02)
+        nn.init.normal_(self.layer_2.weight, std=0.02)
 
     def forward(self, x):
-        x = FeedForward.gelu(self.layer1(x))
+        x = FeedForward.gelu(self.layer_1(x))
         x = self.dropout(x)
-        x = self.layer2(x)
+        x = self.layer_2(x)
 
         return x
 
