@@ -19,7 +19,7 @@ def openai_transformer_config():
                                    'attn_dropout',
                                    'ff_dropout'])
 
-    cfg = Config(n_layers=12, n_embeddings=40478, n_pos_embeddings=512, 
+    cfg = Config(n_layers=12, n_embeddings=40477, n_pos_embeddings=512, 
                  embeddings_size=768, n_heads=12, dropout=0.1,
                  embed_dropout=0.1, attn_dropout=0.1, ff_dropout=0.1)
 
