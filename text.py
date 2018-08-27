@@ -122,14 +122,27 @@ class BPEVocab:
 
         return word
 
-    def string2ids(self, string):
+    def string2ids(self, string, add_bos=False, add_eos=False):
         tokens = self.tokenizer(string)
         bpe_tokens = sum([self._bpe(t) for t in tokens])
+        ids = [self.token2id[t] for t in bpe_tokens]
+        
+        if add_bos:
+            ids = [self.bos_id] + ids
+            
+        if add_eos:
+            ids = ids + [self.eos_id]
 
-        return [self.token2id[t] for t in bpe_tokens]
+        return ids
 
 
-    def ids2string(self, ids):
+    def ids2string(self, ids, remove_bos=False, remove_eos=False):
         bpe_tokens = [self.id2token[id] for id in ids]
+        
+        if bpe_tokens[0] == self.bos_id and remove_bos:
+            bpe_tokens = bpe_tokens[1:]
+            
+        if bpe_tokens[-1] == self.eos_id and remove_eos:
+            bpe_tokens = bpe_tokens[:-1]
 
         return ''.join(bpe_tokens).replace(BPEVocab.we, ' ')
