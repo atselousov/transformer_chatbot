@@ -1,4 +1,5 @@
 from torch.utils.data import Dataset
+from text import BPEVocab
 
 
 class FacebookDataset(Dataset):
@@ -38,7 +39,9 @@ class FacebookDataset(Dataset):
     def make_dataset(data, vocab):
         dataset = []
         for dialog in data:
-            pass
+            strings = [s for s in dialog['persona_info']] + [s for s in dialog['dialog']]
+            ids = [vocab.string2ids(s, add_bos=True, add_eos=True) for s in strings]
+            dataset.extend(ids)
 
         return dataset
 
