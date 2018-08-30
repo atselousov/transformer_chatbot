@@ -29,7 +29,7 @@ class BPEVocab:
             if codes[0].startswith('#version'):
                 codes = codes[1:]
 
-            codes = [c.split() for c in codes if c]
+            codes = [tuple(c.split()) for c in codes if c]
 
         return BPEVocab(vocab, codes, *args, **kwargs)
 
@@ -43,7 +43,7 @@ class BPEVocab:
     def __init__(self, vocab, codes, tokenizer=SpacyLowerTokenizer()):
         #TODO: add check for special tokens
         vocab = [BPEVocab.pad_token, BPEVocab.bos_token, BPEVocab.eos_token, BPEVocab.talker1_token, BPEVocab.talker2_token] + vocab
-
+        
         self.token2id = {t: i for i, t in enumerate(vocab)}
         self.id2token = {i: t for i, t in enumerate(vocab)}
         self.bpe_ranks = dict(zip(codes, range(len(codes))))
@@ -85,7 +85,7 @@ class BPEVocab:
         pairs = BPEVocab.get_pairs(word)
 
         if not pairs:
-            return token + BPEVocab.we
+            return (token + BPEVocab.we,)
 
         while True:
             bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float('inf')))
@@ -124,7 +124,7 @@ class BPEVocab:
 
     def string2ids(self, string, add_bos=False, add_eos=False):
         tokens = self.tokenizer(string)
-        bpe_tokens = sum([self._bpe(t) for t in tokens])
+        bpe_tokens = sum([self._bpe(t) for t in tokens], tuple())
         ids = [self.token2id[t] for t in bpe_tokens]
         
         if add_bos:
