@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Dataset
 from text import BPEVocab
 
@@ -40,8 +41,9 @@ class FacebookDataset(Dataset):
         dataset = []
         for dialog in data:
             strings = [s for s in dialog['persona_info']] + [s for s in dialog['dialog']]
-            ids = [vocab.string2ids(s, add_bos=True, add_eos=True) for s in strings]
-            dataset.extend(ids)
+            ids_list = [vocab.string2ids(s, add_bos=True, add_eos=True) for s in strings]
+            ids_list = [torch.tensor(ids, dtype=torch.long) for ids in ids_list]
+            dataset.extend(ids_list)
 
         return dataset
 
