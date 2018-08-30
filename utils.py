@@ -6,22 +6,62 @@ from collections import namedtuple
 import torch
 import numpy as np
 import scipy
+from torch.utils.checkpoint import checkpoint
+
+def pad_sequence(sequences, batch_first=False, padding_value=0):
+    # assuming trailing dimensions and type of all the Tensors
+    # in sequences are same and fetching those from sequences[0]
+    max_size = sequences[0].size()
+    trailing_dims = max_size[1:]
+    max_len = max([s.size(0) for s in sequences])
+    if batch_first:
+        out_dims = (len(sequences), max_len) + trailing_dims
+    else:
+        out_dims = (max_len, len(sequences)) + trailing_dims
+
+    out_tensor = sequences[0].data.new(*out_dims).fill_(padding_value)
+    for i, tensor in enumerate(sequences):
+        length = tensor.size(0)
+        # use index notation to prevent duplicate references to the tensor
+        if batch_first:
+            out_tensor[i, :length, ...] = tensor
+        else:
+            out_tensor[:length, i, ...] = tensor
+
+    return out_tensor
+
+
+def checkpoint_sequential(functions, segments, *inputs):
+    def run_function(start, end, functions):
+        def forward(*inputs):
+            for j in range(start, end + 1):
+                inputs = functions[j](*inputs)
+            return inputs
+        return forward
+
+    if isinstance(functions, torch.nn.Sequential):
+        functions = list(functions.children())
+
+    segment_size = len(functions) // segments
+    # the last chunk has to be non-volatile
+    end = -1
+    for start in range(0, segment_size * (segments - 1), segment_size):
+        end = start + segment_size - 1
+        inputs = checkpoint(run_function(start, end, functions), *inputs)
+        if not isinstance(inputs, tuple):
+            inputs = (inputs,)
+    return run_function(end + 1, len(functions) - 1, functions)(*inputs)
 
 
 def openai_transformer_config():
-    Config = namedtuple('Config', ['n_layers',
-                                   'n_embeddings',
-                                   'n_pos_embeddings',
-                                   'embeddings_size',
-                                   'n_heads',
-                                   'dropout',
-                                   'embed_dropout',
-                                   'attn_dropout',
-                                   'ff_dropout'])
+    class dotdict(dict):
+        __getattr__ = dict.get
+        __setattr__ = dict.__setitem__
+        __delattr__ = dict.__delitem__
 
-    cfg = Config(n_layers=12, n_embeddings=40477, n_pos_embeddings=512, 
-                 embeddings_size=768, n_heads=12, dropout=0.1,
-                 embed_dropout=0.1, attn_dropout=0.1, ff_dropout=0.1)
+    cfg = dotdict({'n_layers': 12, 'n_embeddings': 40477, 'n_pos_embeddings': 512, 
+                   'embeddings_size': 768, 'n_heads': 12, 'dropout': 0.1,
+                   'embed_dropout': 0.1, 'attn_dropout': 0.1, 'ff_dropout': 0.1})
 
     return cfg
 
@@ -61,8 +101,7 @@ def load_openai_weights(model, directory, n_special_tokens=0):
     model.embeddings.weight.data[n_special_tokens:] = torch.from_numpy(parameters_weights[1])
 
 
-    del parameters_weights[0]
-    del parameters_weights[1]
+    parameters_weights = parameters_weights[2:]
 
     for name, weights in zip(parameters_names, parameters_weights):
         name = name[6:]  # skip "model/"
@@ -83,4 +122,7 @@ def load_openai_weights(model, directory, n_special_tokens=0):
                 num = int(l[1])
                 pointer = pointer[num]
 
-        pointer.data = torch.from_numpy(weights)
+        if len(weights.shape) == 3: # conv1d to linear
+            weights = weights[0].transpose((1, 0))
+
+        pointer.data[...] = torch.from_numpy(weights)
