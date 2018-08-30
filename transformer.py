@@ -3,15 +3,16 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from utils import checkpoint_sequential
 
 class MultiheadAttention(nn.Module):
     @classmethod
-    def _get_future_mask(cls, time_size):
-        if not hasattr(cls, '_future_mask'):
-            cls._future_mask = torch.triu(torch.ones(time_size, time_size, dtype=torch.uint8), 1)
+    def _get_future_mask(cls, time_size, device):
+        if not hasattr(cls, '_future_mask') or cls._future_mask.device != device or cls._future_mask.shape[0] < time_size:
+            cls._future_mask = torch.triu(torch.ones(time_size, time_size, dtype=torch.uint8, device=device), 1)
 
-        if cls._future_mask.shape[0] < time_size:
-            cls._future_mask = torch.triu(cls._future_mask.resize_(time_size, time_size).fill_(1), 1)
+        #if cls._future_mask.shape[0] < time_size:
+        #    cls._future_mask = torch.triu(cls._future_mask.resize_(time_size, time_size).fill_(1), 1)
 
         mask = cls._future_mask[:time_size, :time_size]
 
@@ -35,15 +36,15 @@ class MultiheadAttention(nn.Module):
         nn.init.normal_(self.out_proj.weight, std=0.02)
 
     def _split_heads(self, x, is_key=False):
-        x = x.view(x.shape[0], x.shape[1], self.n_heads, self.n_features // self.n_head)
+        x = x.view(x.shape[0], x.shape[1], self.n_heads, self.n_features // self.n_heads)
         x = x.permute(0, 2, 3, 1) if is_key else x.permute(0, 2, 1, 3)
 
         return x
 
     def _attn(self, q, k, v, padding_mask=None):
-        w = torch.matmul(q, k) / math.sqrt(self.n_features // self.n_head)
+        w = torch.matmul(q, k) / math.sqrt(self.n_features // self.n_heads)
 
-        feature_mask = MultiheadAttention._get_future_mask(w.shape[-1]).unsqueeze(0).unsqueeze(0)
+        feature_mask = MultiheadAttention._get_future_mask(w.shape[-1], w.device).unsqueeze(0).unsqueeze(0)
         w.masked_fill_(feature_mask, float('-inf'))
         
         if padding_mask is not None:
@@ -122,20 +123,22 @@ class TransformerBlock(nn.Module):
         f = self.dropout(f)
         x = self.ff_norm(x + f)
 
-        return x
+        return x, padding_mask
 
 
 class TransformerModel(nn.Module):
     def __init__(self, n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
-                 padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout):
+                 padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout, 
+                 n_segments=None):
         super(TransformerModel, self).__init__()
         
         self.embeddings = nn.Embedding(n_embeddings, embeddings_size, padding_idx=padding_idx)
         self.pos_embeddings = nn.Embedding(n_pos_embeddings + 1, embeddings_size, padding_idx=0)
         self.embed_dropout = nn.Dropout(embed_dropout)
         self.layers = nn.ModuleList([TransformerBlock(embeddings_size, n_heads, dropout, attn_dropout, ff_dropout) for _ in range(n_layers)])
+        self.n_segments = n_segments        
         self.pre_softmax = nn.Linear(embeddings_size, n_embeddings, bias=False)
-
+        
         self._init_weights()
 
     def _init_weights(self):
@@ -145,16 +148,20 @@ class TransformerModel(nn.Module):
 
     def forward(self, x):
         padding_mask = x.eq(self.embeddings.padding_idx)
+        padding_mask.requires_grad_()
 
         positions = torch.cumsum(~padding_mask, dim=-1, dtype=torch.long)
         positions.masked_fill_(padding_mask, self.pos_embeddings.padding_idx)
 
-        x = self.embeddings(x) * math.sqrt(self.embeddings.embeddings_size) + self.pos_embeddings(positions)
+        x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions)
         x = self.embed_dropout(x)
 
-        for layer in self.layers:
-            x = layer(x, padding_mask)
+        if self.n_segments is not None:
+            x, _ = checkpoint_sequential(self.layers, self.n_segments, x, padding_mask)
+        else:
+            for layer in self.layers:
+                x, _ = layer(x, padding_mask)
 
         x = self.pre_softmax(x)
-
+        
         return x
