@@ -11,9 +11,9 @@ class Trainer:
                  batch_size=8, lr=6.25e-5, lr_warmup=2000, n_jobs=0, 
                  clip_grad=1, device=torch.device('cuda')):
         self.model = model.to(device)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=self.model.embeddings.padding_idx)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx)
         base_optimizer = Adam(self.model.parameters(), lr=lr, weight_decay=0.01)
-        self.optimizer = NoamOpt(self.model.embeddings.embedding_dim, 1, lr_warmup, base_optimizer)
+        self.optimizer = NoamOpt(self.model.embeddings_size, 1, lr_warmup, base_optimizer)
 
         self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, 
                                            num_workers=n_jobs, collate_fn=self.collate_func)
@@ -25,19 +25,26 @@ class Trainer:
         self.device = device
 
     def collate_func(self, data):
-        data = [d[:self.model.pos_embeddings.num_embeddings - 1] for d in data]
-        data = pad_sequence(data, batch_first=True, padding_value=self.model.embeddings.padding_idx)
-        return data[:, :-1], data[:, 1:]
+        persona_info, x, y = zip(*data)
+
+        #persona_info = pad_sequence(persona_info, batch_first=True, padding_value=self.model.padding_idx)
+        x = [t[-self.model.n_pos_embeddings:] for t in x]
+        x = pad_sequence(x, batch_first=True, padding_value=self.model.padding_idx)
+        y = [t[:self.model.n_pos_embeddings] for t in y]
+        y = pad_sequence(y, batch_first=True, padding_value=self.model.padding_idx)
+
+        return [x], y
 
     def _train_epoch(self, epoch):
         self.model.train()
 
         tqdm_data = tqdm(self.train_dataloader, desc='Train (epoch #{})'.format(epoch))
         loss = 0
-        for i, (inputs, targets) in enumerate(tqdm_data):
-            inputs, targets = inputs.to(self.device), targets.to(self.device)
-            outputs = self.model(inputs)
-            batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), targets.view(-1))
+        for i, (contexts, targets) in enumerate(tqdm_data):
+            contexts, targets = [c.to(self.device) for c in contexts], targets.to(self.device)
+            prev_targets, next_targets = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
+            outputs = self.model(prev_targets, contexts)
+            batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), next_targets.view(-1))
 
             self.optimizer.zero_grad()
             batch_loss.backward()
@@ -57,10 +64,11 @@ class Trainer:
 
         tqdm_data = tqdm(self.test_dataloader, desc='Test (epoch #{})'.format(epoch))
         loss = 0
-        for i, (inputs, targets) in enumerate(tqdm_data):
-            inputs, targets = inputs.to(self.device), targets.to(self.device)
-            outputs = self.model(inputs)
-            batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), targets.view(-1))
+        for i, (contexts, targets) in enumerate(tqdm_data):
+            contexts, targets = [c.to(self.device) for c in contexts], targets.to(self.device)
+            prev_targets, next_targets = targets[:, :-1], targets[:, 1:]
+            outputs = self.model(prev_targets, contexts)
+            batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), next_targets.view(-1))
 
             loss = (i * loss + batch_loss.item()) / (i + 1)
 

@@ -15,8 +15,12 @@ class BPEVocab:
     pad_token = '<pad>'
     bos_token = '<s>'
     eos_token = '</s>'
-    talker1_token = '<t1>'
-    talker2_token = '<t2>'
+    info_bos = '<i>'
+    info_eos = '</i>'
+    talker1_bos = '<t1>'
+    talker1_eos = '</t1>'
+    talker2_bos = '<t2>'
+    talker2_eos = '</t2>'
 
     @staticmethod
     def from_files(vocab_path, codes_path, *args, **kwargs):
@@ -42,7 +46,10 @@ class BPEVocab:
 
     def __init__(self, vocab, codes, tokenizer=SpacyLowerTokenizer()):
         #TODO: add check for special tokens
-        vocab = [BPEVocab.pad_token, BPEVocab.bos_token, BPEVocab.eos_token, BPEVocab.talker1_token, BPEVocab.talker2_token] + vocab
+        self.spec_tokens = [BPEVocab.pad_token, BPEVocab.bos_token, BPEVocab.eos_token,
+                            BPEVocab.info_bos, BPEVocab.info_eos, BPEVocab.talker1_bos,
+                            BPEVocab.talker1_eos, BPEVocab.talker2_bos, BPEVocab.talker2_eos]
+        vocab = self.spec_tokens + vocab
         
         self.token2id = {t: i for i, t in enumerate(vocab)}
         self.id2token = {i: t for i, t in enumerate(vocab)}
@@ -55,7 +62,7 @@ class BPEVocab:
 
     @property
     def n_special_tokens(self):
-        return 5
+        return len(self.spec_tokens)
 
     @property
     def pad_id(self):
@@ -70,12 +77,28 @@ class BPEVocab:
         return self.token2id[BPEVocab.eos_token]
 
     @property
-    def talker1_id(self):
-        return self.token2id[BPEVocab.talker1_token]
+    def info_bos_id(self):
+        return self.token2id[BPEVocab.info_bos]
 
     @property
-    def talker2_id(self):
-        return self.token2id[BPEVocab.talker2_token]
+    def info_eos_id(self):
+        return self.token2id[BPEVocab.info_eos]
+
+    @property
+    def talker1_bos_id(self):
+        return self.token2id[BPEVocab.talker1_bos]
+
+    @property
+    def talker1_eos_id(self):
+        return self.token2id[BPEVocab.talker1_eos]
+
+    @property
+    def talker2_bos_id(self):
+        return self.token2id[BPEVocab.talker2_bos]
+
+    @property
+    def talker2_eos_id(self):
+        return self.token2id[BPEVocab.talker2_eos]
 
     def _bpe(self, token):
         if token in self.cache:
@@ -122,27 +145,15 @@ class BPEVocab:
 
         return word
 
-    def string2ids(self, string, add_bos=False, add_eos=False):
+    def string2ids(self, string):
         tokens = self.tokenizer(string)
         bpe_tokens = sum([self._bpe(t) for t in tokens], tuple())
         ids = [self.token2id[t] for t in bpe_tokens]
-        
-        if add_bos:
-            ids = [self.bos_id] + ids
-            
-        if add_eos:
-            ids = ids + [self.eos_id]
 
         return ids
 
 
-    def ids2string(self, ids, remove_bos=False, remove_eos=False):
+    def ids2string(self, ids):
         bpe_tokens = [self.id2token[id] for id in ids]
-        
-        if bpe_tokens[0] == self.bos_id and remove_bos:
-            bpe_tokens = bpe_tokens[1:]
-            
-        if bpe_tokens[-1] == self.eos_id and remove_eos:
-            bpe_tokens = bpe_tokens[:-1]
-
+    
         return ''.join(bpe_tokens).replace(BPEVocab.we, ' ')

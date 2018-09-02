@@ -2,7 +2,7 @@ import os
 import torch
 
 from utils import openai_transformer_config, load_openai_weights
-from transformer import TransformerModel
+from model import TransformerModel
 from trainer import Trainer
 from text import BPEVocab
 from dataset import FacebookDataset
@@ -17,13 +17,13 @@ def main():
     train_dataset_path = os.path.join(datasets_dir, 'ConvAI2/train_self_revised_no_cands.txt')
     test_dataset_path = os.path.join(datasets_dir, 'ConvAI2/valid_self_revised_no_cands.txt')
     
-    batch_size = 4
+    batch_size = 8
     lr = 6.25e-5
     lr_warmup = 2000
-    n_jobs = 0
+    n_jobs = 2
     clip_grad = 1
-    n_pos_embeddings = 64
-    n_segments = 2
+    n_pos_embeddings = 256
+    n_segments = 4
     #-----------------------------------------
 
     vocab = BPEVocab.from_files(bpe_vocab_path, bpe_codes_path)
@@ -43,7 +43,7 @@ def main():
                                    ff_dropout=config.ff_dropout,
                                    n_segments=n_segments)
 
-    load_openai_weights(transformer, parameters_dir, n_special_tokens=vocab.n_special_tokens)
+    load_openai_weights(transformer.transformer_module, parameters_dir, n_special_tokens=vocab.n_special_tokens)
 
     train_dataset = FacebookDataset(train_dataset_path, vocab)
     test_dataset = FacebookDataset(test_dataset_path, vocab)

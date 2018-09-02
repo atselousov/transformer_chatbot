@@ -40,10 +40,23 @@ class FacebookDataset(Dataset):
     def make_dataset(data, vocab):
         dataset = []
         for dialog in data:
-            strings = [s for s in dialog['persona_info']] + [s for s in dialog['dialog']]
-            ids_list = [vocab.string2ids(s, add_bos=True, add_eos=True) for s in strings]
-            ids_list = [torch.tensor(ids, dtype=torch.long) for ids in ids_list]
-            dataset.extend(ids_list)
+            persona_info = ' '.join([s for s in dialog['persona_info']])
+            persona_info = [vocab.info_bos_id] + vocab.string2ids(persona_info) + [vocab.info_eos_id]
+
+            dialog_x = []
+            for i, string in enumerate(dialog['dialog'], 1):
+                ids = vocab.string2ids(string)
+
+                if i % 2 == 1:
+                    ids = [vocab.talker1_bos_id] + ids + [vocab.talker1_eos_id]
+                else:
+                    dialog_y = [vocab.bos_id] + ids + [vocab.eos_id]
+                    dataset_item = (persona_info, dialog_x, dialog_y)
+                    dataset.append(dataset_item)
+
+                    ids = [vocab.talker2_bos_id] + ids + [vocab.talker2_eos_id]
+
+                dialog_x.extend(ids)
 
         return dataset
 
@@ -55,4 +68,10 @@ class FacebookDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-        return self.data[idx]
+        persona_info, x, y = self.data[idx]
+        
+        persona_info = torch.tensor(persona_info, dtype=torch.long)
+        x = torch.tensor(x, dtype=torch.long)
+        y = torch.tensor(y, dtype=torch.long)
+
+        return persona_info, x, y

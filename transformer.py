@@ -41,11 +41,12 @@ class MultiheadAttention(nn.Module):
 
         return x
 
-    def _attn(self, q, k, v, padding_mask=None):
+    def _attn(self, q, k, v, apply_future_mask=True, padding_mask=None):
         w = torch.matmul(q, k) / math.sqrt(self.n_features // self.n_heads)
 
-        feature_mask = MultiheadAttention._get_future_mask(w.shape[-1], w.device).unsqueeze(0).unsqueeze(0)
-        w.masked_fill_(feature_mask, float('-inf'))
+        if apply_future_mask:
+            future_mask = MultiheadAttention._get_future_mask(w.shape[-1], w.device).unsqueeze(0).unsqueeze(0)
+            w.masked_fill_(future_mask, float('-inf'))
         
         if padding_mask is not None:
             padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
@@ -63,14 +64,27 @@ class MultiheadAttention(nn.Module):
 
         return x
 
-    def forward(self, x, padding_mask):
-        query, key, value = self.qkv_proj(x).split(self.n_features, dim=-1)
+    def forward(self, query, key, value, padding_mask):
+        qkv_same = (query.data_ptr() == key.data_ptr() == value.data_ptr())
+        kv_same = (key.data_ptr() == value.data_ptr())
+
+        if qkv_same:
+            query, key, value = self.qkv_proj(query).split(self.n_features, dim=-1)
+            apply_future_mask = True  # self-attention
+        elif kv_same:
+            q_w, q_b = self.qkv_proj.weight[:self.n_features, :], self.qkv_proj.bias[:self.n_features]
+            query = F.linear(query, q_w, q_b)
+            kv_w, kv_b = self.qkv_proj.weight[self.n_features:, :], self.qkv_proj.bias[self.n_features:]
+            key, value = F.linear(key, kv_w, kv_b).split(self.n_features, dim=-1)
+            apply_future_mask = False
+        else:
+            assert False
 
         query = self._split_heads(query)
         key = self._split_heads(key, is_key=True)
         value = self._split_heads(value)
 
-        x = self._attn(query, key, value, padding_mask)
+        x = self._attn(query, key, value, apply_future_mask, padding_mask)
         x = self._merge_heads(x)
 
         x = self.out_proj(x)
@@ -114,39 +128,47 @@ class TransformerBlock(nn.Module):
         self.ff_norm = nn.LayerNorm(n_features)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, padding_mask=None):
-        a = self.attn(x, padding_mask)
+    def forward(self, x, padding_mask, *contexts):
+        '''
+        contexts = [(context1, padding_mask1), (context2, padding_mask2), ...]
+        '''
+
+        a = self.attn(x, x, x, padding_mask)
         a = self.dropout(a)
         x = self.attn_norm(x + a)
+
+        # TODO: check parallel attention + conv1d
+        for context, context_padding_mask in zip(contexts[:-1], contexts[1:]):
+            a = self.attn(x, context, context, context_padding_mask)
+            a = self.dropout(a)
+            x = self.attn_norm(x + a)
 
         f = self.ff(x)
         f = self.dropout(f)
         x = self.ff_norm(x + f)
 
-        return x, padding_mask
+        return (x, padding_mask) + contexts
 
 
-class TransformerModel(nn.Module):
+class TransformerModule(nn.Module):
     def __init__(self, n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
                  padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout, 
                  n_segments=None):
-        super(TransformerModel, self).__init__()
+        super(TransformerModule, self).__init__()
         
         self.embeddings = nn.Embedding(n_embeddings, embeddings_size, padding_idx=padding_idx)
         self.pos_embeddings = nn.Embedding(n_pos_embeddings + 1, embeddings_size, padding_idx=0)
         self.embed_dropout = nn.Dropout(embed_dropout)
         self.layers = nn.ModuleList([TransformerBlock(embeddings_size, n_heads, dropout, attn_dropout, ff_dropout) for _ in range(n_layers)])
         self.n_segments = n_segments        
-        self.pre_softmax = nn.Linear(embeddings_size, n_embeddings, bias=False)
         
         self._init_weights()
 
     def _init_weights(self):
         nn.init.normal_(self.embeddings.weight, std=0.02)
         nn.init.normal_(self.pos_embeddings.weight, std=0.02)
-        self.pre_softmax.weight = self.embeddings.weight
 
-    def forward(self, x):
+    def forward(self, x, enc_contexts=[]):
         padding_mask = x.eq(self.embeddings.padding_idx)
         padding_mask.requires_grad_()
 
@@ -156,12 +178,14 @@ class TransformerModel(nn.Module):
         x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions)
         x = self.embed_dropout(x)
 
+        enc_contexts = sum(enc_contexts, ())
+
         if self.n_segments is not None:
-            x, _ = checkpoint_sequential(self.layers, self.n_segments, x, padding_mask)
+            out = checkpoint_sequential(self.layers, self.n_segments, x, padding_mask, *enc_contexts)
+            x = out[0]
         else:
             for layer in self.layers:
-                x, _ = layer(x, padding_mask)
-
-        x = self.pre_softmax(x)
+                out = layer(x, padding_mask, *enc_contexts)
+                x = out[0]
         
-        return x
+        return x, padding_mask
