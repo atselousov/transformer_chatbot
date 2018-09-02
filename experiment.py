@@ -30,6 +30,7 @@ def main():
 
     config = openai_transformer_config()
     config.n_pos_embeddings = n_pos_embeddings
+    config.n_embeddings = len(vocab)
 
     transformer = TransformerModel(n_layers=config.n_layers,
                                    n_embeddings=config.n_embeddings,
