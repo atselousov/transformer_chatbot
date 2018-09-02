@@ -17,12 +17,12 @@ def main():
     train_dataset_path = os.path.join(datasets_dir, 'ConvAI2/train_self_revised_no_cands.txt')
     test_dataset_path = os.path.join(datasets_dir, 'ConvAI2/valid_self_revised_no_cands.txt')
     
-    batch_size = 8
+    batch_size = 4
     lr = 6.25e-5
     lr_warmup = 2000
-    n_jobs = 2
+    n_jobs = 4
     clip_grad = 1
-    n_pos_embeddings = 256
+    n_pos_embeddings = 512
     n_segments = 4
     #-----------------------------------------
 

@@ -27,13 +27,14 @@ class Trainer:
     def collate_func(self, data):
         persona_info, x, y = zip(*data)
 
-        #persona_info = pad_sequence(persona_info, batch_first=True, padding_value=self.model.padding_idx)
+        persona_info = [t[:self.model.n_pos_embeddings] for t in persona_info]
+        persona_info = pad_sequence(persona_info, batch_first=True, padding_value=self.model.padding_idx)
         x = [t[-self.model.n_pos_embeddings:] for t in x]
         x = pad_sequence(x, batch_first=True, padding_value=self.model.padding_idx)
         y = [t[:self.model.n_pos_embeddings] for t in y]
         y = pad_sequence(y, batch_first=True, padding_value=self.model.padding_idx)
 
-        return [x], y
+        return [x, persona_info], y
 
     def _train_epoch(self, epoch):
         self.model.train()
