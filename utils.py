@@ -1,12 +1,20 @@
 import re
 import os
 import json
-from collections import namedtuple
+import random
+from collections import namedtuple, Counter
 
 import torch
 import numpy as np
-import scipy
+from scipy.interpolate import RectBivariateSpline
 from torch.utils.checkpoint import checkpoint
+
+
+def set_seed(seed):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    random.seed(seed)
+
 
 def pad_sequence(sequences, batch_first=False, padding_value=0):
     # assuming trailing dimensions and type of all the Tensors
@@ -53,6 +61,33 @@ def checkpoint_sequential(functions, segments, *inputs):
     return run_function(end + 1, len(functions) - 1, functions)(*inputs)
 
 
+def f1_score(predictions, targets):
+    def f1_score_items(pred_items, gold_items):
+        common = Counter(gold_items) & Counter(pred_items)
+        num_same = sum(common.values())
+
+        if num_same == 0:
+            return 0
+
+        precision = num_same / len(pred_items)
+        recall = num_same / len(gold_items)
+        f1 = (2 * precision * recall) / (precision + recall)
+
+        return f1
+    
+    scores = [f1_score_items(p, t) for p, t in zip(predictions, targets)]
+
+    return sum(scores) / len(scores)
+
+
+def save_model(model, path):
+    torch.save(model.state_dict(), path)
+
+
+def load_model(model, path):
+    model.load_state_dict(torch.load(path))
+
+
 def openai_transformer_config():
     class dotdict(dict):
         __getattr__ = dict.get
@@ -89,9 +124,9 @@ def load_openai_weights(model, directory, n_special_tokens=0):
 
     if model.pos_embeddings.num_embeddings - 1 > parameters_weights[0].shape[0]:
         xx = np.linspace(0, parameters_weights[0].shape[0], model.pos_embeddings.num_embeddings - 1)
-        new_kernel = scipy.interpolate.RectBivariateSpline(np.arange(parameters_weights[0].shape[0]),
-                                                           np.arange(parameters_weights[0].shape[1]), 
-                                                           parameters_weights[0])
+        new_kernel = RectBivariateSpline(np.arange(parameters_weights[0].shape[0]),
+                                         np.arange(parameters_weights[0].shape[1]), 
+                                         parameters_weights[0])
         parameters_weights[0] = new_kernel(xx, np.arange(parameters_weights[0].shape[1]))
 
     parameters_weights[0] = parameters_weights[0][:model.pos_embeddings.num_embeddings - 1]
