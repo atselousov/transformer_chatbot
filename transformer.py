@@ -11,9 +11,6 @@ class MultiheadAttention(nn.Module):
         if not hasattr(cls, '_future_mask') or cls._future_mask.device != device or cls._future_mask.shape[0] < time_size:
             cls._future_mask = torch.triu(torch.ones(time_size, time_size, dtype=torch.uint8, device=device), 1)
 
-        #if cls._future_mask.shape[0] < time_size:
-        #    cls._future_mask = torch.triu(cls._future_mask.resize_(time_size, time_size).fill_(1), 1)
-
         mask = cls._future_mask[:time_size, :time_size]
 
         return mask
@@ -175,7 +172,7 @@ class TransformerModule(nn.Module):
 
         positions = torch.cumsum(~padding_mask, dim=-1, dtype=torch.long)
         positions.masked_fill_(padding_mask, self.pos_embeddings.padding_idx)
-
+        
         x = self.embeddings(x) * math.sqrt(self.embeddings.embedding_dim) + self.pos_embeddings(positions)
         x = self.embed_dropout(x)
 
