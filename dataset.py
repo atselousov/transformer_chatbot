@@ -51,7 +51,9 @@ class FacebookDataset(Dataset):
                     ids = [vocab.talker1_bos_id] + ids + [vocab.talker1_eos_id]
                 else:
                     dialog_y = [vocab.bos_id] + ids + [vocab.eos_id]
-                    dataset_item = (persona_info, dialog_x, dialog_y)
+                    dataset_item = (torch.tensor(persona_info, dtype=torch.long), 
+                                    torch.tensor(dialog_x, dtype=torch.long),
+                                    torch.tensor(dialog_y, dtype=torch.long))
                     dataset.append(dataset_item)
 
                     ids = [vocab.talker2_bos_id] + ids + [vocab.talker2_eos_id]
@@ -69,9 +71,4 @@ class FacebookDataset(Dataset):
 
     def __getitem__(self, idx):
         persona_info, x, y = self.data[idx]
-        
-        persona_info = torch.tensor(persona_info, dtype=torch.long)
-        x = torch.tensor(x, dtype=torch.long)
-        y = torch.tensor(y, dtype=torch.long)
-
         return persona_info, x, y
