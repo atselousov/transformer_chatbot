@@ -12,18 +12,21 @@ def main():
     parameters_dir = './parameters'
     datasets_dir = './datasets'
     checkpoint_dir = './checkpoints'
+    checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint')
 
     bpe_vocab_path = os.path.join(parameters_dir, 'bpe.vocab')
     bpe_codes_path = os.path.join(parameters_dir, 'bpe.code')
     train_dataset_path = os.path.join(datasets_dir, 'ConvAI2/train_self_revised_no_cands.txt')
     test_dataset_path = os.path.join(datasets_dir, 'ConvAI2/valid_self_revised_no_cands.txt')
     
+    load_last = False
     n_epochs = 100
     batch_size = 128
     batch_split = 16
     lr = 6.25e-5
     lr_warmup = 16000
     n_jobs = 4
+    label_smoothing = 0.1
     clip_grad = None
     n_pos_embeddings = 1024
     n_segments = 6
@@ -58,8 +61,13 @@ def main():
                                    beam_size=beam_size,  
                                    length_penalty=length_penalty,
                                    n_segments=n_segments)
-
-    load_openai_weights(transformer.transformer_module, parameters_dir, n_special_tokens=vocab.n_special_tokens)
+    
+    if load_last:
+        load_model(transformer, checkpoint_path)
+        print('Weights loaded from {}'.format(checkpoint_path))
+    else:
+        load_openai_weights(transformer.transformer_module, parameters_dir, n_special_tokens=vocab.n_special_tokens)
+        print('OpenAI weights loaded')
 
     train_dataset = FacebookDataset(train_dataset_path, vocab)
     test_dataset = FacebookDataset(test_dataset_path, vocab)
@@ -74,7 +82,7 @@ def main():
             model_trainer.test(metric_funcs)
 
     def save_func(epoch):
-        save_model(model_trainer.model, os.path.join(checkpoint_dir, 'last_checkpoint'))
+        save_model(model_trainer.model, checkpoint_path)
 
     model_trainer.train(n_epochs, after_epoch_funcs=[test_func, save_func])
 

@@ -12,6 +12,7 @@ class TransformerModel(nn.Module):
         super(TransformerModel, self).__init__()
 
         self.padding_idx = padding_idx
+        self.n_embeddings = n_embeddings
         self.n_pos_embeddings = n_pos_embeddings
         self.embeddings_size = embeddings_size
 

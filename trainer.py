@@ -1,17 +1,20 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from utils import pad_sequence
 from optim import Adam, NoamOpt
+from loss import LabelSmoothingLoss
 from tqdm import tqdm
 
 
 class Trainer:
     def __init__(self, model, train_dataset, test_dataset=None, batch_size=8,
                  batch_split=1, lm_weight=0.5, lr=6.25e-5, lr_warmup=2000, n_jobs=0, 
-                 clip_grad=1, device=torch.device('cuda')):
+                 clip_grad=1, label_smoothing=0, device=torch.device('cuda')):
         self.model = model.to(device)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx)
+        self.lm_criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx).to(device)
+        self.criterion = LabelSmoothingLoss(n_labels=self.model.n_embeddings, smoothing=label_smoothing, ignore_index=self.model.padding_idx).to(device)
         base_optimizer = Adam(self.model.parameters(), lr=lr, weight_decay=0.01)
         self.optimizer = NoamOpt(self.model.embeddings_size, 1, lr_warmup, base_optimizer)
 
@@ -53,7 +56,7 @@ class Trainer:
                 enc_context = self.model.encode(context)
                 context_outputs = self.model.generate(enc_context[0])
                 prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
-                batch_lm_loss += self.criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
+                batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
 
                 enc_contexts.append(enc_context)
             
@@ -61,6 +64,7 @@ class Trainer:
 
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
             outputs = self.model.decode(prevs, enc_contexts)
+            outputs = F.log_softmax(outputs, dim=-1)
             batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), nexts.view(-1))
             
             full_loss = (batch_lm_loss * self.lm_weight + batch_loss) / self.batch_split
@@ -95,7 +99,7 @@ class Trainer:
                 enc_context = self.model.encode(context)
                 context_outputs = self.model.generate(enc_context[0])
                 prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
-                batch_lm_loss += self.criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
+                batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
 
                 enc_contexts.append(enc_context)
             
@@ -103,6 +107,7 @@ class Trainer:
 
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
             outputs = self.model.decode(prevs, enc_contexts)
+            outputs = F.log_softmax(outputs, dim=-1)
             batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), nexts.view(-1))
             
             predictions = self.model.beam_search(enc_contexts)
