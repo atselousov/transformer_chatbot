@@ -1,12 +1,16 @@
 import spacy
-
+import ftfy
 
 class SpacyLowerTokenizer:
     def __init__(self):
         self.tokenizer = spacy.load('en', disable=['parser', 'tagger', 'ner', 'textcat'])
 
     def __call__(self, string):
-        return [t.text.lower() for t in self.tokenizer(string)]
+        string = ftfy.fix_text(string)
+        words = [t.text.strip() for t in self.tokenizer(string)]
+        words = [w.lower() for w in words if w]
+
+        return words
 
 
 class BPEVocab:
@@ -63,6 +67,10 @@ class BPEVocab:
     @property
     def n_special_tokens(self):
         return len(self.spec_tokens)
+
+    @property
+    def special_tokens_ids(self):
+        return [self.token2id[t] for t in self.spec_tokens]
 
     @property
     def pad_id(self):
@@ -148,7 +156,7 @@ class BPEVocab:
     def string2ids(self, string):
         tokens = self.tokenizer(string)
         bpe_tokens = sum([self._bpe(t) for t in tokens], tuple())
-        ids = [self.token2id[t] for t in bpe_tokens]
+        ids = [self.token2id[t] for t in bpe_tokens if t in self.token2id]
 
         return ids
 
