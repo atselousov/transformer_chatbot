@@ -62,8 +62,11 @@ class FacebookDataset(Dataset):
 
         return dataset
 
-    def __init__(self, path, vocab):
-        self.data = FacebookDataset.parse_data(path)
+    def __init__(self, paths, vocab):
+        if isinstance(paths, str):
+            paths = [paths]
+        
+        self.data = sum([FacebookDataset.parse_data(path) for path in paths], [])
         self.data = FacebookDataset.make_dataset(self.data, vocab)
 
     def __len__(self):

@@ -12,17 +12,21 @@ def main():
     parameters_dir = './parameters'
     datasets_dir = './datasets'
     checkpoint_dir = './checkpoints'
-    checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint')
 
+    checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint')
     bpe_vocab_path = os.path.join(parameters_dir, 'bpe.vocab')
     bpe_codes_path = os.path.join(parameters_dir, 'bpe.code')
-    train_dataset_path = os.path.join(datasets_dir, 'ConvAI2/train_self_revised_no_cands.txt')
-    test_dataset_path = os.path.join(datasets_dir, 'ConvAI2/valid_self_revised_no_cands.txt')
+
+    train_dataset_paths = ['ConvAI2/train_self_revised_no_cands.txt', 'DailyDialog/train_dailydialog.txt']
+    test_dataset_paths = ['ConvAI2/valid_self_revised_no_cands.txt', 'DailyDialog/valid_dailydialog.txt']
+    train_dataset_paths = [os.path.join(datasets_dir, path) for path in train_dataset_paths]
+    test_dataset_paths = [os.path.join(datasets_dir, path) for path in test_dataset_paths]
     
+
     load_last = False
     n_epochs = 100
     batch_size = 128
-    batch_split = 16
+    batch_split = 32
     lr = 6.25e-5
     lr_warmup = 16000
     n_jobs = 4
@@ -69,8 +73,8 @@ def main():
         load_openai_weights(transformer.transformer_module, parameters_dir, n_special_tokens=vocab.n_special_tokens)
         print('OpenAI weights loaded')
 
-    train_dataset = FacebookDataset(train_dataset_path, vocab)
-    test_dataset = FacebookDataset(test_dataset_path, vocab)
+    train_dataset = FacebookDataset(train_dataset_paths, vocab)
+    test_dataset = FacebookDataset(test_dataset_paths, vocab)
 
     model_trainer = Trainer(transformer, train_dataset, test_dataset, batch_size=batch_size,
                             batch_split=batch_split, lr=lr, lr_warmup=lr_warmup,
