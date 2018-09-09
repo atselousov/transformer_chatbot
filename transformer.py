@@ -130,14 +130,10 @@ class TransformerBlock(nn.Module):
         contexts = [(context1, padding_mask1), (context2, padding_mask2), ...]
         '''
 
-        a = self.attn(x, x, x, padding_mask)
-        a = self.dropout(a)
-        x = self.attn_norm(x + a)
-
-        # TODO: check parallel attention + conv1d
-        for i in range(len(contexts), 0, 2):
-            context, context_padding_mask = contexts[i], contexts[i + 1]
-            a = self.attn(x, context, context, context_padding_mask)
+        inputs = (x, padding_mask) + contexts
+        for i in range(0, len(inputs), 2):
+            c, m = inputs[i], inputs[i+1]
+            a = self.attn(x, c, c, m)
             a = self.dropout(a)
             x = self.attn_norm(x + a)
 
