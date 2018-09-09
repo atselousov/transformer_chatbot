@@ -17,8 +17,8 @@ def main():
     bpe_vocab_path = os.path.join(parameters_dir, 'bpe.vocab')
     bpe_codes_path = os.path.join(parameters_dir, 'bpe.code')
 
-    train_dataset_paths = ['ConvAI2/train_self_revised_no_cands.txt', 'DailyDialog/train_dailydialog.txt']
-    test_dataset_paths = ['ConvAI2/valid_self_revised_no_cands.txt', 'DailyDialog/valid_dailydialog.txt']
+    train_dataset_paths = ['ConvAI2/train_self_revised_no_cands.txt']#, 'DailyDialog/train_dailydialog.txt']
+    test_dataset_paths = ['ConvAI2/valid_self_revised_no_cands.txt']#, 'DailyDialog/valid_dailydialog.txt']
     train_dataset_paths = [os.path.join(datasets_dir, path) for path in train_dataset_paths]
     test_dataset_paths = [os.path.join(datasets_dir, path) for path in test_dataset_paths]
     
@@ -32,12 +32,13 @@ def main():
     n_jobs = 4
     label_smoothing = 0.1
     clip_grad = None
-    n_pos_embeddings = 1024
+    n_pos_embeddings = 512
     n_segments = 6
-    max_seq_len = 320
+    max_seq_len = 512
     beam_size = 1
     length_penalty = 0.8
     test_period = 1
+    sample = False
     seed = 0
     #-----------------------------------------
     
@@ -64,7 +65,8 @@ def main():
                                    max_seq_len=max_seq_len,
                                    beam_size=beam_size,  
                                    length_penalty=length_penalty,
-                                   n_segments=n_segments)
+                                   n_segments=n_segments,
+                                   sample=sample)
     
     if load_last:
         load_model(transformer, checkpoint_path)

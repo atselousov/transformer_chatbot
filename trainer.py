@@ -39,7 +39,7 @@ class Trainer:
         y = [t[:self.model.n_pos_embeddings - 1] for t in y]
         y = pad_sequence(y, batch_first=True, padding_value=self.model.padding_idx)
 
-        return [x, persona_info], y
+        return [persona_info, x], y
 
     def _eval_train(self, epoch):
         self.model.train()
