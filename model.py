@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from transformer import TransformerModule
 
@@ -98,8 +99,12 @@ class TransformerModel(nn.Module):
 
             predicts = []
             result = prevs.view(batch_size, self.beam_size, -1)
-
-            bests = torch.randint(0, self.beam_size, batch_size) if self.sample else beam_scores.argmax(dim=-1)
+            
+            if self.sample:
+                probs = F.softmax(beam_scores, dim=-1)
+                bests = torch.multinomial(probs, 1).view(-1)
+            else:
+                bests = beam_scores.argmax(dim=-1)
             
             for i in range(batch_size):
                 best_len = beam_lens[i, bests[i]]
