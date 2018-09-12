@@ -46,7 +46,7 @@ class TransformerModel(nn.Module):
         return self.generate(x)
 
     def predict(self, contexts=[]):
-        enc_contexts = [encode(c) for c in contexts]
+        enc_contexts = [self.encode(c) for c in contexts]
         return self.beam_search(enc_contexts)
 
     def _length_penalty(self, sequence_lengths):
