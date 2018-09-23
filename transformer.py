@@ -7,17 +7,16 @@ from utils import checkpoint_sequential
 
 class MultiheadAttention(nn.Module):
     @classmethod
-    def _get_future_mask(cls, time_size, device):
-        if not hasattr(cls, '_future_mask') or cls._future_mask.device != device or cls._future_mask.shape[0] < time_size:
-            cls._future_mask = torch.triu(torch.ones(time_size, time_size, dtype=torch.uint8, device=device), 1)
+    def _get_future_mask(cls, size, device):
+        if not hasattr(cls, '_future_mask') or cls._future_mask.device != device or cls._future_mask.shape < size:
+            cls._future_mask = torch.triu(torch.ones(size[0], size[1], dtype=torch.uint8, device=device), 1)
 
-        mask = cls._future_mask[:time_size, :time_size]
+        mask = cls._future_mask[:size[0], :size[1]]
 
         return mask
 
     def __init__(self, n_features, n_heads, dropout):
         super(MultiheadAttention, self).__init__()
-
         assert n_features % n_heads == 0
 
         self.n_features = n_features
@@ -42,15 +41,18 @@ class MultiheadAttention(nn.Module):
         w = torch.matmul(q, k) / math.sqrt(self.n_features // self.n_heads)
 
         if apply_future_mask:
-            future_mask = MultiheadAttention._get_future_mask(w.shape[-1], w.device).unsqueeze(0).unsqueeze(0)
+            future_mask = MultiheadAttention._get_future_mask(w.shape[-2:], w.device).unsqueeze(0).unsqueeze(0)
             w.masked_fill_(future_mask, float('-inf'))
         
         if padding_mask is not None:
-            padding_mask = padding_mask.unsqueeze(1).unsqueeze(2)
-            w.masked_fill_(padding_mask, float('-inf'))
+            w.masked_fill_(padding_mask.unsqueeze(1).unsqueeze(2), float('-inf'))
 
         w = F.softmax(w, dim=-1)
         w = self.dropout(w)
+
+        if padding_mask is not None:
+            w.masked_fill_(padding_mask.all(dim=-1).unsqueeze(1).unsqueeze(2).unsqueeze(3), 0)
+
         out = torch.matmul(w, v)
 
         return out
@@ -126,19 +128,16 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, padding_mask, *contexts):
-        '''
-        contexts = [(context1, padding_mask1), (context2, padding_mask2), ...]
-        '''
+        '''contexts = [(context1, padding_mask1), ...]'''
 
         inputs = (x, padding_mask) + contexts
 
         full_attn = 0
-        n_attn = len(inputs) // 2
         for i in range(0, len(inputs), 2):
-            c, m = inputs[i], inputs[i+1]
+            c, m = inputs[i], inputs[i+1].byte()
             a = self.attn(x, c, c, m)
-            full_attn += (a / n_attn)
-        
+            full_attn += a
+
         full_attn = self.dropout(full_attn)
         x = self.attn_norm(x + full_attn)
 
@@ -154,7 +153,7 @@ class TransformerModule(nn.Module):
                  padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout, 
                  n_segments=None):
         super(TransformerModule, self).__init__()
-        
+
         self.embeddings = nn.Embedding(n_embeddings, embeddings_size, padding_idx=padding_idx)
         self.pos_embeddings = nn.Embedding(n_pos_embeddings + 1, embeddings_size, padding_idx=0)
         self.embed_dropout = nn.Dropout(embed_dropout)
@@ -169,7 +168,6 @@ class TransformerModule(nn.Module):
 
     def forward(self, x, enc_contexts=[]):
         padding_mask = x.eq(self.embeddings.padding_idx)
-        padding_mask.requires_grad_()
 
         positions = torch.cumsum(~padding_mask, dim=-1, dtype=torch.long)
         positions.masked_fill_(padding_mask, self.pos_embeddings.padding_idx)
@@ -180,6 +178,8 @@ class TransformerModule(nn.Module):
         enc_contexts = sum(enc_contexts, ())
 
         if self.n_segments is not None:
+            padding_mask = padding_mask.float()  # fucking checkpoint_sequential
+            padding_mask.requires_grad_()  # fucking checkpoint_sequential
             out = checkpoint_sequential(self.layers, self.n_segments, x, padding_mask, *enc_contexts)
             x = out[0]
         else:
