@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformer import TransformerModule
+from transformer_module import TransformerModule
+
 
 class TransformerModel(nn.Module):
     def __init__(self, n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
