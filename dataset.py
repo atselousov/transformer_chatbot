@@ -60,7 +60,7 @@ class FacebookDataset(Dataset):
 
                 dialog_x.extend(ids)
                 
-        split_size = 10000
+        split_size = 50000
         n = len(dataset) // split_size
         dataset = [dataset[i::n] for i in range(n)]
         dataset = [sorted(d, key=lambda x: (len(x[1]), len(x[0]), len(x[2]))) for d in dataset]
