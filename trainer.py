@@ -30,6 +30,14 @@ class Trainer:
         self.clip_grad = clip_grad
         self.device = device
 
+    def state_dict(self):
+        return {'model': self.model.state_dict(),
+                'optimizer': self.optimizer.state_dict()}
+
+    def load_state_dict(self, state_dict):
+        self.model.load_state_dict(state_dict['model'], strict=False)
+        self.optimizer.load_state_dict(state_dict['optimizer'])
+
     def collate_func(self, data):
         persona_info, h, y = zip(*data)
 

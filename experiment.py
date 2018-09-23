@@ -2,11 +2,12 @@ import os
 import torch
 import random
 
-from utils import openai_transformer_config, load_openai_weights, set_seed, f1_score, save_model, load_model
+from utils import openai_transformer_config, load_openai_weights, set_seed, f1_score
 from model import TransformerModel
 from trainer import Trainer
 from text import BPEVocab
 from dataset import FacebookDataset
+
 
 def main():
     #-----------------------------------------
@@ -40,7 +41,7 @@ def main():
     batch_size = 256
     batch_split = 64
     lr = 6.25e-5
-    lr_warmup = 16000
+    lr_warmup = 3000
     lm_weight = 0.5
     n_jobs = 4
     label_smoothing = 0.1
@@ -53,6 +54,7 @@ def main():
     test_period = 1
     sample = False
     seed = 0
+    device = torch.device('cuda')
     #-----------------------------------------
     
     set_seed(seed)
@@ -80,11 +82,8 @@ def main():
                                    length_penalty=length_penalty,
                                    n_segments=n_segments,
                                    sample=sample)
-    
-    if load_last:
-        load_model(transformer, last_checkpoint_path)
-        print('Weights loaded from {}'.format(last_checkpoint_path))
-    else:
+
+    if not load_last:
         load_openai_weights(transformer.transformer_module, parameters_dir, n_special_tokens=vocab.n_special_tokens)
         print('OpenAI weights loaded')
 
@@ -93,10 +92,14 @@ def main():
 
     model_trainer = Trainer(transformer, train_dataset, test_dataset, batch_size=batch_size,
                             batch_split=batch_split, lr=lr, lr_warmup=lr_warmup, lm_weight=lm_weight,
-                            n_jobs=n_jobs, clip_grad=clip_grad, device=torch.device('cuda'))
+                            n_jobs=n_jobs, clip_grad=clip_grad, device=device)
+
+    if load_last:
+        model_trainer.load_state_dict(torch.load(last_checkpoint_path, map_location=device))
+        print('Weights loaded from {}'.format(last_checkpoint_path))
     
     def save_func(epoch):
-        save_model(model_trainer.model, last_checkpoint_path)    
+        torch.save(model_trainer.state_dict(), last_checkpoint_path)  
 
     def sample_text_func(epoch):
         n_samples = 5
@@ -108,7 +111,7 @@ def main():
             
             persona_info_str = vocab.ids2string(persona_info[1:-1].tolist())
             dialog_str = vocab.ids2string(dialog.tolist())
-            dialog_str = dialog_str.replace(vocab.talker1_bos, '\n\t- ').replace(vocab.talker2_bos, '\n\t- ')
+            dialog_str = dialog_str.replace(vocab.talker1_bos, '\n\t- ').replace(vocab.talker2_bos, '\n\t -')
             target_str = vocab.ids2string(target[1:-1].tolist())
             prediction_str = vocab.ids2string(prediction)
 
@@ -125,9 +128,9 @@ def main():
 
     try:
         model_trainer.train(n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func])
-    except Exception as e:
-        save_model(model_trainer.model, interrupt_checkpoint_path)
-        raise e
+    except (KeyboardInterrupt, Exception) as e:
+        torch.save(model_trainer.state_dict(), interrupt_checkpoint_path) 
+
 
 if __name__ == '__main__':
     main()

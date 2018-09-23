@@ -99,8 +99,15 @@ class NoamOpt:
         self.optimizer = optimizer
 
         self._step = 0
-        self._rate = 0
         
+    def state_dict(self):
+        return {'step': self._step,
+                'optimizer': self.optimizer.state_dict()}
+
+    def load_state_dict(self, state_dict):
+        self._step = state_dict['step']
+        self.optimizer.load_state_dict(state_dict['optimizer'])
+
     def zero_grad(self):
         return self.optimizer.zero_grad()
 
@@ -113,7 +120,6 @@ class NoamOpt:
         rate = self.rate()
         for p in self.optimizer.param_groups:
             p['lr'] = rate
-        self._rate = rate
         self.optimizer.step()
         
     def rate(self, step=None):

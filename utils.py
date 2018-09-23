@@ -80,14 +80,6 @@ def f1_score(predictions, targets):
     return sum(scores) / len(scores)
 
 
-def save_model(model, path):
-    torch.save(model.state_dict(), path)
-
-
-def load_model(model, path):
-    model.load_state_dict(torch.load(path), strict=False)
-
-
 def openai_transformer_config():
     class dotdict(dict):
         __getattr__ = dict.get
