@@ -19,12 +19,8 @@ class BPEVocab:
     pad_token = '<pad>'
     bos_token = '<s>'
     eos_token = '</s>'
-    info_bos = '<i>'
-    info_eos = '</i>'
     talker1_bos = '<t1>'
-    talker1_eos = '</t1>'
     talker2_bos = '<t2>'
-    talker2_eos = '</t2>'
 
     @staticmethod
     def from_files(vocab_path, codes_path, *args, **kwargs):
@@ -49,10 +45,9 @@ class BPEVocab:
         return set(zip(string[:-1], string[1:]))
 
     def __init__(self, vocab, codes, tokenizer=SpacyLowerTokenizer()):
-        #TODO: add check for special tokens
+        # TODO: add check for special tokens
         self.spec_tokens = [BPEVocab.pad_token, BPEVocab.bos_token, BPEVocab.eos_token,
-                            BPEVocab.info_bos, BPEVocab.info_eos, BPEVocab.talker1_bos,
-                            BPEVocab.talker1_eos, BPEVocab.talker2_bos, BPEVocab.talker2_eos]
+                            BPEVocab.talker1_bos, BPEVocab.talker2_bos]
         vocab = self.spec_tokens + vocab
         
         self.token2id = {t: i for i, t in enumerate(vocab)}

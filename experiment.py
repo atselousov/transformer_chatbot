@@ -14,27 +14,39 @@ def main():
     datasets_dir = './datasets'
     checkpoint_dir = './checkpoints'
 
-    checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint')
+    last_checkpoint_path = os.path.join(checkpoint_dir, 'last_checkpoint')
+    interrupt_checkpoint_path = os.path.join(checkpoint_dir, 'interrupt_checkpoint')
+
     bpe_vocab_path = os.path.join(parameters_dir, 'bpe.vocab')
     bpe_codes_path = os.path.join(parameters_dir, 'bpe.code')
 
-    train_dataset_paths = ['ConvAI2/train_self_revised_no_cands.txt', 'ConvAI2/train_self_original_no_cands.txt', 'DailyDialog/train_dailydialog.txt']
-    test_dataset_paths = ['ConvAI2/valid_self_revised_no_cands.txt', 'ConvAI2/valid_self_original_no_cands.txt', 'DailyDialog/valid_dailydialog.txt']
-    train_dataset_paths = [os.path.join(datasets_dir, path) for path in train_dataset_paths]
-    test_dataset_paths = [os.path.join(datasets_dir, path) for path in test_dataset_paths]
+    convai_train_dataset = ['ConvAI2/train_self_revised_no_cands.txt', 'ConvAI2/train_self_original_no_cands.txt']
+    dailydialog_train_dataset = ['DailyDialog/train_dailydialog.txt'] 
+    reddit_train_dataset = sorted([os.path.join('Reddit', name) for name in os.listdir(os.path.join(datasets_dir, 'Reddit'))], reverse=True)[:2]
+
+    convai_test_dataset = ['ConvAI2/valid_self_revised_no_cands.txt', 'ConvAI2/valid_self_original_no_cands.txt']
+    dailydialog_test_dataset = ['DailyDialog/valid_dailydialog.txt'] 
+    reddit_test_dataset = []    
+
+
+    train_dataset = convai_train_dataset + dailydialog_train_dataset + reddit_train_dataset
+    test_dataset = convai_test_dataset + dailydialog_test_dataset + reddit_test_dataset
+    train_dataset_paths = [os.path.join(datasets_dir, path) for path in train_dataset]
+    test_dataset_paths = [os.path.join(datasets_dir, path) for path in test_dataset]
     
 
     load_last = True
     n_epochs = 100
     batch_size = 256
-    batch_split = 64 
+    batch_split = 64
     lr = 6.25e-5
     lr_warmup = 16000
+    lm_weight = 0.5
     n_jobs = 4
     label_smoothing = 0.1
     clip_grad = None
-    n_pos_embeddings = 512
-    n_segments = 6
+    n_pos_embeddings = 1024
+    n_segments = 3
     max_seq_len = 256
     beam_size = 1
     length_penalty = 0.8
@@ -70,39 +82,39 @@ def main():
                                    sample=sample)
     
     if load_last:
-        load_model(transformer, checkpoint_path)
-        print('Weights loaded from {}'.format(checkpoint_path))
+        load_model(transformer, last_checkpoint_path)
+        print('Weights loaded from {}'.format(last_checkpoint_path))
     else:
         load_openai_weights(transformer.transformer_module, parameters_dir, n_special_tokens=vocab.n_special_tokens)
         print('OpenAI weights loaded')
 
-    train_dataset = FacebookDataset(train_dataset_paths, vocab)
-    test_dataset = FacebookDataset(test_dataset_paths, vocab)
+    train_dataset = FacebookDataset(train_dataset_paths, vocab, n_pos_embeddings - 1)
+    test_dataset = FacebookDataset(test_dataset_paths, vocab, n_pos_embeddings - 1)
 
     model_trainer = Trainer(transformer, train_dataset, test_dataset, batch_size=batch_size,
-                            batch_split=batch_split, lr=lr, lr_warmup=lr_warmup,
+                            batch_split=batch_split, lr=lr, lr_warmup=lr_warmup, lm_weight=lm_weight,
                             n_jobs=n_jobs, clip_grad=clip_grad, device=torch.device('cuda'))
     
     def save_func(epoch):
-        save_model(model_trainer.model, checkpoint_path)    
+        save_model(model_trainer.model, last_checkpoint_path)    
 
     def sample_text_func(epoch):
         n_samples = 5
         samples_idxs = random.sample(range(len(test_dataset)), n_samples)
         samples = [test_dataset[idx] for idx in samples_idxs]
         for persona_info, dialog, target in samples:
-            contexts = [persona_info.unsqueeze(0).to(model_trainer.device), dialog.unsqueeze(0).to(model_trainer.device)]
+            contexts = [c.unsqueeze(0).to(model_trainer.device) for c in [persona_info, dialog] if len(c) > 0]
             prediction = model_trainer.model.predict(contexts)[0]
             
             persona_info_str = vocab.ids2string(persona_info[1:-1].tolist())
             dialog_str = vocab.ids2string(dialog.tolist())
-            dialog_str = dialog_str.replace(vocab.talker1_eos, '\n\t').replace(vocab.talker2_eos, '\n\t')
+            dialog_str = dialog_str.replace(vocab.talker1_bos, '\n\t- ').replace(vocab.talker2_bos, '\n\t- ')
             target_str = vocab.ids2string(target[1:-1].tolist())
             prediction_str = vocab.ids2string(prediction)
 
             print('\n')
             print('Persona info:\n\t{}'.format(persona_info_str))
-            print('Dialog:\n\t{}'.format(dialog_str))
+            print('Dialog:{}'.format(dialog_str))
             print('Target:\n\t{}'.format(target_str))
             print('Prediction:\n\t{}'.format(prediction_str))
 
@@ -111,7 +123,11 @@ def main():
             metric_funcs = {'f1_score': f1_score}
             model_trainer.test(metric_funcs)
 
-    model_trainer.train(n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func])
+    try:
+        model_trainer.train(n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func])
+    except Exception as e:
+        save_model(model_trainer.model, interrupt_checkpoint_path)
+        raise e
 
 if __name__ == '__main__':
     main()
