@@ -41,8 +41,8 @@ def main():
                             n_special_tokens=vocab.n_special_tokens)
         print('OpenAI weights loaded from {}'.format(trainer_config.openai_parameters_dir))
 
-    train_dataset = FacebookDataset(trainer_config.train_datasets, vocab, model_config.n_pos_embeddings - 1)
-    test_dataset = FacebookDataset(trainer_config.test_datasets, vocab, model_config.n_pos_embeddings - 1)
+    train_dataset = FacebookDataset(trainer_config.train_datasets, vocab, transformer.n_pos_embeddings - 1)
+    test_dataset = FacebookDataset(trainer_config.test_datasets, vocab, transformer.n_pos_embeddings - 1)
 
     model_trainer = Trainer(transformer,
                             train_dataset, 

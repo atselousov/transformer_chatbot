@@ -19,8 +19,7 @@ def get_model_config():
                        'beam_size': 1,
                        'sample': False,
                        'length_penalty': 0.8,
-                       'n_segments': 3,
-                       'device': 'cuda'})
+                       'n_segments': 3})
 
     return config
 
@@ -52,3 +51,4 @@ def get_trainer_config():
                                          './datasets/DailyDialog/valid_dailydialog.txt']})
 
     return config
+

@@ -80,28 +80,12 @@ class BPEVocab:
         return self.token2id[BPEVocab.eos_token]
 
     @property
-    def info_bos_id(self):
-        return self.token2id[BPEVocab.info_bos]
-
-    @property
-    def info_eos_id(self):
-        return self.token2id[BPEVocab.info_eos]
-
-    @property
     def talker1_bos_id(self):
         return self.token2id[BPEVocab.talker1_bos]
 
     @property
-    def talker1_eos_id(self):
-        return self.token2id[BPEVocab.talker1_eos]
-
-    @property
     def talker2_bos_id(self):
         return self.token2id[BPEVocab.talker2_bos]
-
-    @property
-    def talker2_eos_id(self):
-        return self.token2id[BPEVocab.talker2_eos]
 
     def _bpe(self, token):
         if token in self.cache:
