@@ -36,12 +36,12 @@ def main():
     test_dataset_paths = [os.path.join(datasets_dir, path) for path in test_dataset]
     
 
-    load_last = True
+    load_last = False
     n_epochs = 100
     batch_size = 256
     batch_split = 64
     lr = 6.25e-5
-    lr_warmup = 3000
+    lr_warmup = 5000
     lm_weight = 0.5
     n_jobs = 4
     label_smoothing = 0.1
@@ -106,13 +106,13 @@ def main():
         samples_idxs = random.sample(range(len(test_dataset)), n_samples)
         samples = [test_dataset[idx] for idx in samples_idxs]
         for persona_info, dialog, target in samples:
-            contexts = [c.unsqueeze(0).to(model_trainer.device) for c in [persona_info, dialog] if len(c) > 0]
+            contexts = [torch.tensor([c], dtype=torch.long, device=model_trainer.device) for c in [persona_info, dialog] if len(c) > 0]
             prediction = model_trainer.model.predict(contexts)[0]
             
-            persona_info_str = vocab.ids2string(persona_info[1:-1].tolist())
-            dialog_str = vocab.ids2string(dialog.tolist())
-            dialog_str = dialog_str.replace(vocab.talker1_bos, '\n\t- ').replace(vocab.talker2_bos, '\n\t -')
-            target_str = vocab.ids2string(target[1:-1].tolist())
+            persona_info_str = vocab.ids2string(persona_info[1:-1])
+            dialog_str = vocab.ids2string(dialog)
+            dialog_str = dialog_str.replace(vocab.talker1_bos, '\n\t- ').replace(vocab.talker2_bos, '\n\t- ')
+            target_str = vocab.ids2string(target[1:-1])
             prediction_str = vocab.ids2string(prediction)
 
             print('\n')
@@ -129,7 +129,8 @@ def main():
     try:
         model_trainer.train(n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func])
     except (KeyboardInterrupt, Exception) as e:
-        torch.save(model_trainer.state_dict(), interrupt_checkpoint_path) 
+        torch.save(model_trainer.state_dict(), interrupt_checkpoint_path)
+        raise e
 
 
 if __name__ == '__main__':
