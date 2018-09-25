@@ -1,4 +1,5 @@
 import torch
+import torch.nn.functional as F
 from collections import deque
 from parlai.core.agents import Agent
 from model.transformer_model import TransformerModel
@@ -16,6 +17,8 @@ class TransformerAgent(Agent):
         agent_args.add_argument('--no-cuda', type='bool', default=False,
                                 help='disable GPUs even if available. otherwise, will use GPUs if '
                                      'available on the device.')
+        agent_args.add_argument('--rank_candidates', type='bool', default=False,
+                                help='Whether the model should parse candidates for ranking.')
         
         return argparser
 
@@ -51,6 +54,7 @@ class TransformerAgent(Agent):
             state_dict = torch.load(model_config.checkpoint_path, map_location=lambda storage, loc: storage)
             if 'model' in state_dict:
                 state_dict = state_dict['model']
+
             self.model.load_state_dict(state_dict)
             print('Weights loaded from {}'.format(model_config.checkpoint_path))
 
@@ -85,11 +89,12 @@ class TransformerAgent(Agent):
             info, dialog = self._parse(text)
 
             info = [self.vocab.string2ids(i) for i in info]
-            dialog = [[self.vocab.talker1_bos_id if k % 2 == 1 else self.vocab.talker2_bos_id] + \
-                      self.vocab.string2ids(d) for k, d in enumerate(dialog, 1)]
-
             self.history['info'].extend(sum(info, []))
-            self.history['dialog'].extend(sum(dialog, []))
+
+            for i, d in enumerate(dialog, 1):
+                talker_id = [self.vocab.talker1_bos_id if i % 2 == 1 else self.vocab.talker2_bos_id]
+                d = talker_id + self.vocab.string2ids(d)
+                self.history['dialog'].extend(d)
 
         observation['agent'] = self        
 
@@ -102,39 +107,84 @@ class TransformerAgent(Agent):
         return self.batch_act([self.observation])[0]       
 
     def batch_act(self, observations):
-        batch_reply = [{'id': self.getID(), 'text': ''} for _ in range(len(observations))]
+        def is_valid_history(history):
+            return len(history['info']) or len(history['dialog'])
 
-        valid_ids = [i for i, obs in enumerate(observations) 
-                        if (len(obs['agent'].history['info']) or len(obs['agent'].history['dialog']))]
+        def to_tensor(string):
+            ids = [self.vocab.bos_id] + self.vocab.string2ids(string) + [self.vocab.eos_id]
+            return torch.tensor(ids, dtype=torch.long)
+
+
+        batch_reply = [{'id': self.getID(), 'text': '', 'text_candidates': []} for _ in range(len(observations))]
+        valid_ids = [i for i, obs in enumerate(observations) if is_valid_history(obs['agent'].history)]
         batch_size = len(valid_ids)
 
-        if batch_size != 0:
+        if batch_size == 0:
+            return batch_reply
+
+        try:
             valid_observations = [observations[i] for i in valid_ids]
 
-            info = [obs['agent'].history['info'][:self.model.n_pos_embeddings-1] for obs in valid_observations]
-            dialog = [obs['agent'].history['dialog'][-self.model.n_pos_embeddings+1:] for obs in valid_observations]
+            infos = [obs['agent'].history['info'][:self.model.n_pos_embeddings-1] for obs in valid_observations]
+            dialogs = [obs['agent'].history['dialog'][-self.model.n_pos_embeddings+1:] for obs in valid_observations]
 
             contexts = []
 
-            if max(map(len, info)) > 0:
-                info = [torch.tensor(d, dtype=torch.long) for d in info]
-                info = pad_sequence(info, batch_first=True, padding_value=self.model.padding_idx)
-                contexts.append(info)
+            if max(map(len, infos)) > 0:
+                infos = [torch.tensor(i, dtype=torch.long) for i in infos]
+                infos = pad_sequence(infos, batch_first=True, padding_value=self.model.padding_idx)
+                if self.use_cuda:
+                    infos = infos.cuda() 
+                contexts.append(infos)
 
-            if max(map(len, dialog)) > 0:
-                dialog = [torch.tensor(d, dtype=torch.long) for d in dialog]
-                dialog = pad_sequence(dialog, batch_first=True, padding_value=self.model.padding_idx)
-                contexts.append(dialog)
+            if max(map(len, dialogs)) > 0:
+                dialogs = [torch.tensor(d, dtype=torch.long) for d in dialogs]
+                dialogs = pad_sequence(dialogs, batch_first=True, padding_value=self.model.padding_idx)
+                if self.use_cuda:
+                    dialogs = dialogs.cuda() 
+                contexts.append(dialogs)
+            
+            enc_contexts = [self.model.encode(c) for c in contexts]
+            pred_texts = self.model.beam_search(contexts)
 
-            pred_texts = self.model.predict(contexts)
             for i in range(batch_size):
                 pred_text = pred_texts[i]
                 valid_observations[i]['agent'].history['dialog'].extend([self.vocab.talker2_bos_id] + pred_text)
-                pred_text =  self.vocab.ids2string(pred_text)
+                pred_text = self.vocab.ids2string(pred_text)
                 batch_reply[valid_ids[i]]['text'] = pred_text
 
-        else:
-            print('Not valid batch!')
+            if self.opt['rank_candidates']:
+                candidates = [list(obs.get('label_candidates', [])) for obs in valid_observations]
+                lens_candidates = [len(c) for c in candidates]
+
+                if max(lens_candidates) > 0:
+                    candidates = [c + ['' for _ in range(max(lens_candidates) - len(c))] for c in candidates]
+                    scores = [[] for _ in range(len(candidates))]
+
+                    for i in range(max(lens_candidates)):
+                        current_cands = [to_tensor(c[i])[:self.model.n_pos_embeddings-1] for c in candidates]
+                        current_cands = pad_sequence(current_cands, batch_first=True, padding_value=self.model.padding_idx)
+                        if self.use_cuda:
+                            current_cands = current_cands.cuda()
+
+                        logits = self.model.decode(current_cands[:, :-1], enc_contexts)                          
+                        log_probas = F.log_softmax(logits, dim=-1)
+                        log_probas = log_probas[current_cands[:, 1:].unsqueeze(-1)].squeeze(-1)
+                        log_probas.masked_fill_(current_cands[:, 1:].eq(self.model.padding_idx), 0)
+                        current_scores = log_probas.sum(dim=-1)
+                        
+                        for k, s in enumerate(current_scores):
+                            if i < lens_candidates[k]:
+                                scores[k].append(s.item())
+
+                    ranked_ids = [sorted(range(len(s)), key=lambda k: s[k], reverse=True) for s in scores]
+                    ranked_strings = [c[ids] for ids, c in zip(ranked_ids, candidates)]
+                    
+                    for i in range(batch_size):
+                        batch_reply[valid_ids[i]]['text_candidates'] = ranked_strings[i]
+
+        except Exception as e:
+            print(e)
 
         return batch_reply
 
