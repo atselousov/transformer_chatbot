@@ -77,14 +77,14 @@ class TransformerModel(nn.Module):
                 probs = probs.view(batch_size, self.beam_size, -1)
 
                 beam_scores = beam_scores.repeat(1, probs.shape[-1]) + probs.view(batch_size, -1) * (1 - is_end.repeat(1, probs.shape[-1]).float())
-                prenalty = self._length_penalty(beam_lens.float() + 1 - is_end.float()).repeat(1, probs.shape[-1])
-                beam_scores = beam_scores / prenalty
+                penalty = self._length_penalty(beam_lens.float() + 1 - is_end.float()).repeat(1, probs.shape[-1])
+                beam_scores = beam_scores / penalty
                 beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)
                 
                 beam_idxs = (idxs.float() / probs.shape[-1]).long()            
                 sym_idxs = torch.fmod(idxs, probs.shape[-1])
                 
-                beam_scores *= torch.gather(prenalty, 1, beam_idxs)
+                beam_scores *= torch.gather(penalty, 1, beam_idxs)
                
                 is_end = torch.gather(is_end, 1, beam_idxs)
                 is_end[sym_idxs == self.eos_id] = 1
