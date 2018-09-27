@@ -4,9 +4,9 @@ from model.utils import openai_transformer_config
 
 def get_model_config():
     default_config = openai_transformer_config()
-    config = AttrDict({'bpe_vocab_path': '../parameters/bpe.vocab',
-                       'bpe_codes_path': '../parameters/bpe.code',
-                       'checkpoint_path': '../checkpoints/last_checkpoint', 
+    config = AttrDict({'bpe_vocab_path': './parameters/bpe.vocab',
+                       'bpe_codes_path': './parameters/bpe.code',
+                       'checkpoint_path': './checkpoints/last_checkpoint', 
                        'n_layers': default_config.n_layers,
                        'n_pos_embeddings': 1024,
                        'embeddings_size': default_config.embeddings_size,
