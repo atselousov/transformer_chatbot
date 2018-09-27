@@ -24,10 +24,12 @@ class TransformerAgent(Agent):
 
     def __init__(self, opt, shared=None):
         super(TransformerAgent, self).__init__(opt, shared)
-        
+
         self.use_cuda = not self.opt.get('no_cuda') and torch.cuda.is_available()
         if self.use_cuda:
             torch.cuda.set_device(self.opt['gpu'])
+
+        torch.set_grad_enabled(False)
 
         model_config = get_model_config()
         self.vocab = BPEVocab.from_files(model_config.bpe_vocab_path, model_config.bpe_codes_path)
@@ -73,7 +75,7 @@ class TransformerAgent(Agent):
         dialog = []
         for subtext in text.split('\n'):
             if subtext.startswith('your persona:'):
-                subtext = sentence.replace('your persona:', '').strip()
+                subtext = subtext.replace('your persona:', '').strip()
                 persona_info.append(subtext)
             else:
                 dialog.append(subtext)
@@ -126,8 +128,7 @@ class TransformerAgent(Agent):
             valid_observations = [observations[i] for i in valid_ids]
 
             infos = [obs['agent'].history['info'][:self.model.n_pos_embeddings-1] for obs in valid_observations]
-            dialogs = [obs['agent'].history['dialog'][-self.model.n_pos_embeddings+1:] for obs in valid_observations]
-
+            dialogs = [list(obs['agent'].history['dialog'])[-self.model.n_pos_embeddings+1:] for obs in valid_observations]
             contexts = []
 
             if max(map(len, infos)) > 0:
@@ -143,9 +144,9 @@ class TransformerAgent(Agent):
                 if self.use_cuda:
                     dialogs = dialogs.cuda() 
                 contexts.append(dialogs)
-            
+
             enc_contexts = [self.model.encode(c) for c in contexts]
-            pred_texts = self.model.beam_search(contexts)
+            pred_texts = self.model.beam_search(enc_contexts)
 
             for i in range(batch_size):
                 pred_text = pred_texts[i]
@@ -166,19 +167,21 @@ class TransformerAgent(Agent):
                         current_cands = pad_sequence(current_cands, batch_first=True, padding_value=self.model.padding_idx)
                         if self.use_cuda:
                             current_cands = current_cands.cuda()
-
+                        
                         logits = self.model.decode(current_cands[:, :-1], enc_contexts)                          
                         log_probas = F.log_softmax(logits, dim=-1)
-                        log_probas = log_probas[current_cands[:, 1:].unsqueeze(-1)].squeeze(-1)
+                        log_probas = torch.gather(log_probas, -1, current_cands[:, 1:].unsqueeze(-1)).squeeze(-1)
                         log_probas.masked_fill_(current_cands[:, 1:].eq(self.model.padding_idx), 0)
-                        current_scores = log_probas.sum(dim=-1)
+
+                        current_lens = current_cands[:, 1:].ne(self.model.padding_idx).float().sum(dim=-1)
+                        current_scores = log_probas.sum(dim=-1) / current_lens
                         
                         for k, s in enumerate(current_scores):
                             if i < lens_candidates[k]:
                                 scores[k].append(s.item())
 
                     ranked_ids = [sorted(range(len(s)), key=lambda k: s[k], reverse=True) for s in scores]
-                    ranked_strings = [c[ids] for ids, c in zip(ranked_ids, candidates)]
+                    ranked_strings = [[c[i] for i in ids] for ids, c in zip(ranked_ids, candidates)]
                     
                     for i in range(batch_size):
                         batch_reply[valid_ids[i]]['text_candidates'] = ranked_strings[i]
@@ -196,7 +199,7 @@ class TransformerAgent(Agent):
         return shared
 
     def reset(self):
-        self.history = {'info': [], 'dialog': deque(maxlen=self.model.n_pos_embeddings-1))}
+        self.history = {'info': [], 'dialog': deque(maxlen=self.model.n_pos_embeddings-1)}
         self.episode_done = True
         self.observation = None
 
