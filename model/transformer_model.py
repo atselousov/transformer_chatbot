@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformer_module import TransformerModule
+from .transformer_module import TransformerModule
 
 
 class TransformerModel(nn.Module):
@@ -48,7 +48,9 @@ class TransformerModel(nn.Module):
 
     def predict(self, contexts=[]):
         enc_contexts = [self.encode(c) for c in contexts]
-        return self.beam_search(enc_contexts)
+        prediction = self.beam_search(enc_contexts)
+
+        return prediction
 
     def _length_penalty(self, sequence_lengths):
         """https://arxiv.org/abs/1609.08144"""
@@ -67,22 +69,33 @@ class TransformerModel(nn.Module):
             beam_scores = torch.zeros(batch_size, self.beam_size, device=device)
             beam_lens = torch.ones(batch_size, self.beam_size, dtype=torch.long, device=device)
             is_end = torch.zeros(batch_size, self.beam_size, dtype=torch.uint8, device=device)
+
+            beam_enc_contexts = []
+            for c, p in enc_contexts:
+                c = c.unsqueeze(1).repeat(1, self.beam_size, 1, 1)
+                c = c.view(-1, c.shape[2], c.shape[3])
+                p = p.unsqueeze(1).repeat(1, self.beam_size, 1)
+                p = p.view(-1, p.shape[2])
+                beam_enc_contexts.append((c, p))
             
-            enc_contexts = [(c.repeat(self.beam_size, 1, 1), p.repeat(self.beam_size, 1)) for c, p in enc_contexts]
-
             for i in range(self.max_seq_len):
-                outputs, _ = self.transformer_module(prevs, enc_contexts)
+                outputs, _ = self.transformer_module(prevs, beam_enc_contexts)
 
-                probs = self.pre_softmax(outputs[:, -1, :])
-                probs = probs.view(batch_size, self.beam_size, -1)
+                logits = self.pre_softmax(outputs[:, -1, :])
+                log_probs = F.log_softmax(logits, dim=-1)
+                log_probs = log_probs.view(batch_size, self.beam_size, -1)
 
-                beam_scores = beam_scores.repeat(1, probs.shape[-1]) + probs.view(batch_size, -1) * (1 - is_end.repeat(1, probs.shape[-1]).float())
-                penalty = self._length_penalty(beam_lens.float() + 1 - is_end.float()).repeat(1, probs.shape[-1])
+                beam_scores = beam_scores.unsqueeze(-1) + log_probs * (1 - is_end.float().unsqueeze(-1))
+                beam_scores = beam_scores.view(batch_size, -1)
+            
+                penalty = self._length_penalty(beam_lens.float() + 1 - is_end.float())
+                penalty = penalty.unsqueeze(-1).repeat(1, 1, log_probs.shape[-1]).view(batch_size, -1)
+
                 beam_scores = beam_scores / penalty
-                beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)
-                
-                beam_idxs = (idxs.float() / probs.shape[-1]).long()            
-                sym_idxs = torch.fmod(idxs, probs.shape[-1])
+                beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)               
+
+                beam_idxs = (idxs.float() / log_probs.shape[-1]).long()
+                sym_idxs = torch.fmod(idxs, log_probs.shape[-1])
                 
                 beam_scores *= torch.gather(penalty, 1, beam_idxs)
                
