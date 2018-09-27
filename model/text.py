@@ -19,8 +19,12 @@ class BPEVocab:
     pad_token = '<pad>'
     bos_token = '<s>'
     eos_token = '</s>'
+    info_bos = '<i>'
+    info_eos = '</i>'
     talker1_bos = '<t1>'
+    talker1_eos = '</t1>'
     talker2_bos = '<t2>'
+    talker2_eos = '</t2>'
 
     @staticmethod
     def from_files(vocab_path, codes_path, *args, **kwargs):
@@ -45,9 +49,10 @@ class BPEVocab:
         return set(zip(string[:-1], string[1:]))
 
     def __init__(self, vocab, codes, tokenizer=SpacyLowerTokenizer()):
-        # TODO: add check for special tokens
+        #TODO: add check for special tokens
         self.spec_tokens = [BPEVocab.pad_token, BPEVocab.bos_token, BPEVocab.eos_token,
-                            BPEVocab.talker1_bos, BPEVocab.talker2_bos]
+                            BPEVocab.info_bos, BPEVocab.info_eos, BPEVocab.talker1_bos,
+                            BPEVocab.talker1_eos, BPEVocab.talker2_bos, BPEVocab.talker2_eos]
         vocab = self.spec_tokens + vocab
         
         self.token2id = {t: i for i, t in enumerate(vocab)}
@@ -80,12 +85,28 @@ class BPEVocab:
         return self.token2id[BPEVocab.eos_token]
 
     @property
+    def info_bos_id(self):
+        return self.token2id[BPEVocab.info_bos]
+
+    @property
+    def info_eos_id(self):
+        return self.token2id[BPEVocab.info_eos]
+
+    @property
     def talker1_bos_id(self):
         return self.token2id[BPEVocab.talker1_bos]
 
     @property
+    def talker1_eos_id(self):
+        return self.token2id[BPEVocab.talker1_eos]
+
+    @property
     def talker2_bos_id(self):
         return self.token2id[BPEVocab.talker2_bos]
+
+    @property
+    def talker2_eos_id(self):
+        return self.token2id[BPEVocab.talker2_eos]
 
     def _bpe(self, token):
         if token in self.cache:

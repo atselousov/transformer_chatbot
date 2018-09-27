@@ -60,11 +60,11 @@ class FacebookDataset(Dataset):
 
                 dialog_x.extend(ids)
                 
-        split_size = 100000
+        '''split_size = 100000
         n = max(len(dataset) // split_size, 1)
         dataset = [dataset[i::n] for i in range(n)]
         dataset = [sorted(d, key=lambda x: (len(x[1]), len(x[0]), len(x[2]))) for d in dataset]
-        dataset = sum(dataset, [])
+        dataset = sum(dataset, [])'''
 
         return dataset
 

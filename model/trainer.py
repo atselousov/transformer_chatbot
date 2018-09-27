@@ -19,7 +19,7 @@ class Trainer:
         base_optimizer = Adam(self.model.parameters(), lr=lr, weight_decay=0.01)
         self.optimizer = NoamOpt(self.model.embeddings_size, 1, lr_warmup, base_optimizer)
 
-        self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size//batch_split, shuffle=False, 
+        self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size//batch_split, shuffle=True, 
                                            num_workers=n_jobs, collate_fn=self.collate_func)
         if test_dataset is not None:
             self.test_dataloader = DataLoader(test_dataset, batch_size=batch_size//batch_split, shuffle=False, 
@@ -42,14 +42,14 @@ class Trainer:
         persona_info, h, y = zip(*data)
 
         # memory hack
-        max_seq_len = 640
+        '''max_seq_len = 640
         if max(map(len, persona_info)) > max_seq_len or \
            max(map(len, h)) > max_seq_len or \
            max(map(len, y)) > max_seq_len:
            idx = random.randint(0, len(data) - 1)
            persona_info = [persona_info[idx]]
            h = [h[idx]]
-           y = [y[idx]]
+           y = [y[idx]]'''
 
 
         contexts = []
