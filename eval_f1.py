@@ -5,8 +5,7 @@ if __name__ == '__main__':
     parser = setup_args()
 
     parser.set_defaults(model='agent:TransformerAgent',
-                        batch_sort=True,
-                        batchsize=8)
-    opt = parser.parse_args(print_args=False)
+                        batchsize=10)
+    opt = parser.parse_args()
     eval_f1(opt, print_parser=parser)
 
