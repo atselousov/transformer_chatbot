@@ -51,7 +51,8 @@ class TransformerAgent(Agent):
                                           beam_size=model_config.beam_size,  
                                           length_penalty=model_config.length_penalty,
                                           n_segments=model_config.n_segments,
-                                          sample=model_config.sample)
+                                          sample=model_config.sample,
+                                          annealing=model_config.annealing)
 
             state_dict = torch.load(model_config.checkpoint_path, map_location=lambda storage, loc: storage)
             if 'model' in state_dict:
@@ -187,6 +188,7 @@ class TransformerAgent(Agent):
                         batch_reply[valid_ids[i]]['text_candidates'] = ranked_strings[i]
 
         except Exception as e:
+            #raise e
             print(e)
 
         return batch_reply

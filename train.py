@@ -33,7 +33,8 @@ def main():
                                    beam_size=model_config.beam_size,  
                                    length_penalty=model_config.length_penalty,
                                    n_segments=model_config.n_segments,
-                                   sample=model_config.sample)
+                                   sample=model_config.sample,
+                                   annealing=model_config.annealing)
 
     if not trainer_config.load_last:
         load_openai_weights(transformer.transformer_module, 

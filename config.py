@@ -15,9 +15,10 @@ def get_model_config():
                        'embed_dropout': default_config.embed_dropout,
                        'attn_dropout': default_config.attn_dropout,
                        'ff_dropout': default_config.ff_dropout,
-                       'max_seq_len': 320,
-                       'beam_size': 5,
+                       'max_seq_len': 256,
+                       'beam_size': 1,
                        'sample': False,
+                       'annealing': 0,
                        'length_penalty': 0.8,
                        'n_segments': None})
 

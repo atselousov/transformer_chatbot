@@ -1,3 +1,4 @@
+import random
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +10,7 @@ class TransformerModel(nn.Module):
     def __init__(self, n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
                  padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout,
                  bos_id, eos_id, max_seq_len=256, beam_size=5, sample=False, 
-                 length_penalty=0.8, n_segments=None):
+                 length_penalty=0.8, annealing=0, n_segments=None):
 
         super(TransformerModel, self).__init__()
 
@@ -25,6 +26,7 @@ class TransformerModel(nn.Module):
         self.beam_size = beam_size
         self.sample = sample
         self.length_penalty_coef = length_penalty
+        self.annealing = annealing
 
         self.transformer_module = TransformerModule(n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
                                                     padding_idx, n_heads, dropout, embed_dropout, attn_dropout,
@@ -78,6 +80,7 @@ class TransformerModel(nn.Module):
                 p = p.view(-1, p.shape[2])
                 beam_enc_contexts.append((c, p))
             
+            current_sample_prob = self.annealing
             for i in range(self.max_seq_len):
                 outputs, _ = self.transformer_module(prevs, beam_enc_contexts)
 
@@ -86,34 +89,48 @@ class TransformerModel(nn.Module):
                 log_probs = log_probs.view(batch_size, self.beam_size, -1)
 
                 beam_scores = beam_scores.unsqueeze(-1) + log_probs * (1 - is_end.float().unsqueeze(-1))
-                beam_scores = beam_scores.view(batch_size, -1)
-            
                 penalty = self._length_penalty(beam_lens.float() + 1 - is_end.float())
-                penalty = penalty.unsqueeze(-1).repeat(1, 1, log_probs.shape[-1]).view(batch_size, -1)
-
+                penalty = penalty.unsqueeze(-1).repeat(1, 1, log_probs.shape[-1])
                 beam_scores = beam_scores / penalty
-                beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)               
 
-                beam_idxs = (idxs.float() / log_probs.shape[-1]).long()
-                sym_idxs = torch.fmod(idxs, log_probs.shape[-1])
+                if i == 0:
+                    penalty = penalty[:, 0, :]
+                    beam_scores, idxs = beam_scores[:, 0, :].topk(self.beam_size, dim=-1)
+                    beam_idxs = torch.zeros((batch_size, self.beam_size), dtype=torch.long, device=device)
+                else:
+                    beam_scores = beam_scores.view(batch_size, -1)
+                    penalty = penalty.view(batch_size, -1)
+                    if random.random() < current_sample_prob:
+                        beam_probas = F.softmax(beam_scores, dim=-1)
+                        idxs = torch.multinomial(beam_probas, self.beam_size)
+                        beam_scores = torch.gather(beam_scores, 1, idxs)
+                    else:
+                        beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)               
+                    beam_idxs = (idxs.float() / log_probs.shape[-1]).long()
                 
-                beam_scores *= torch.gather(penalty, 1, beam_idxs)
-               
+                sym_idxs = torch.fmod(idxs, log_probs.shape[-1])
                 is_end = torch.gather(is_end, 1, beam_idxs)
                 is_end[sym_idxs == self.eos_id] = 1
-                if all(is_end.view(-1)):
-                    break
-
+        
                 beam_lens = torch.gather(beam_lens, 1, beam_idxs)
                 beam_lens[~is_end] += 1
-                
+
                 sym_idxs = sym_idxs.view(batch_size * self.beam_size, 1)
 
+                prevs = prevs.view(batch_size, self.beam_size, -1)
+                prevs = torch.gather(prevs, 1, beam_idxs.unsqueeze(-1).repeat(1, 1, prevs.shape[-1]))
+                prevs = prevs.view(batch_size * self.beam_size, -1)
                 prevs = torch.cat([prevs, sym_idxs], dim=1)
+
+                if all(is_end.view(-1)):
+                    break
+                
+                beam_scores *= torch.gather(penalty, 1, beam_idxs)
+                current_sample_prob *= self.annealing
 
             predicts = []
             result = prevs.view(batch_size, self.beam_size, -1)
-            
+
             if self.sample:
                 probs = F.softmax(beam_scores, dim=-1)
                 bests = torch.multinomial(probs, 1).view(-1)
