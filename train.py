@@ -55,7 +55,8 @@ def main():
                             lm_weight=trainer_config.lm_weight,
                             n_jobs=trainer_config.n_jobs, 
                             clip_grad=trainer_config.clip_grad, 
-                            device=device)
+                            device=device,
+                            ignore_idxs=vocab.special_tokens_ids)
 
     if trainer_config.load_last:
         state_dict = torch.load(trainer_config.last_checkpoint_path, map_location=device)

@@ -12,7 +12,8 @@ from tqdm import tqdm
 class Trainer:
     def __init__(self, model, train_dataset, test_dataset=None, batch_size=8,
                  batch_split=1, lm_weight=0.5, lr=6.25e-5, lr_warmup=2000, n_jobs=0, 
-                 clip_grad=None, label_smoothing=0, device=torch.device('cuda')):
+                 clip_grad=None, label_smoothing=0, device=torch.device('cuda'),
+                 ignore_idxs=[]):
         self.model = model.to(device)
         self.lm_criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx).to(device)
         self.criterion = LabelSmoothingLoss(n_labels=self.model.n_embeddings, smoothing=label_smoothing, ignore_index=self.model.padding_idx).to(device)
@@ -29,6 +30,7 @@ class Trainer:
         self.lm_weight = lm_weight
         self.clip_grad = clip_grad
         self.device = device
+        self.ignore_idxs = ignore_idxs
 
     def state_dict(self):
         return {'model': self.model.state_dict(),
@@ -81,12 +83,14 @@ class Trainer:
             enc_contexts = []
             batch_lm_loss = 0
             for context in contexts:
-                enc_context = self.model.encode(context)
+                enc_context = self.model.encode(context.clone())
+                enc_contexts.append(enc_context)
+
                 context_outputs = self.model.generate(enc_context[0])
+                ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
+                context.masked_fill_(ignore_mask, self.model.padding_idx)
                 prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
                 batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
-
-                enc_contexts.append(enc_context)
             
             batch_lm_loss /= len(contexts)
 
@@ -124,12 +128,14 @@ class Trainer:
             enc_contexts = []
             batch_lm_loss = 0
             for context in contexts:
-                enc_context = self.model.encode(context)
+                enc_context = self.model.encode(contextcontext.clone())
+                enc_contexts.append(enc_context)
+
                 context_outputs = self.model.generate(enc_context[0])
+                ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
+                context.masked_fill_(ignore_mask, self.model.padding_idx)
                 prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
                 batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
-
-                enc_contexts.append(enc_context)
             
             batch_lm_loss /= len(contexts)
 
