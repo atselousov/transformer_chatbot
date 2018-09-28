@@ -41,14 +41,14 @@ class FacebookDataset(Dataset):
         dataset = []
         for dialog in data:
             persona_info = ' '.join([s for s in dialog['persona_info']])
-            persona_info = vocab.string2ids(persona_info)
+            persona_info = [vocab.info_bos_id] + vocab.string2ids(persona_info) + [vocab.info_eos_id]
 
             dialog_x = []
             for i, string in enumerate(dialog['dialog'], 1):
                 ids = vocab.string2ids(string)
 
                 if i % 2 == 1:
-                    ids = [vocab.talker1_bos_id] + ids
+                    ids = [vocab.talker1_bos_id] + ids + [vocab.talker1_eos_id]
                 else:
                     dialog_y = [vocab.bos_id] + ids + [vocab.eos_id]
                     dataset_item = (persona_info[:max_lengths],
@@ -56,7 +56,7 @@ class FacebookDataset(Dataset):
                                     dialog_y[:max_lengths])
                     dataset.append(dataset_item)
 
-                    ids = [vocab.talker2_bos_id] + ids
+                    ids = [vocab.talker2_bos_id] + ids + [vocab.talker2_eos_id]
 
                 dialog_x.extend(ids)
                 

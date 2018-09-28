@@ -75,6 +75,7 @@ class TransformerAgent(Agent):
         persona_info = []
         dialog = []
         for subtext in text.split('\n'):
+            subtext = subtext.strip()
             if subtext.startswith('your persona:'):
                 subtext = subtext.replace('your persona:', '').strip()
                 persona_info.append(subtext)
@@ -90,13 +91,18 @@ class TransformerAgent(Agent):
         if 'text' in observation:
             text = observation['text']
             info, dialog = self._parse(text)
-
+        
             info = [self.vocab.string2ids(i) for i in info]
-            self.history['info'].extend(sum(info, []))
+            info = [self.vocab.info_bos_id] + sum(info, []) + [self.vocab.info_eos_id]
+            self.history['info'].extend(info)
 
             for i, d in enumerate(dialog, 1):
-                talker_id = [self.vocab.talker1_bos_id if i % 2 == 1 else self.vocab.talker2_bos_id]
-                d = talker_id + self.vocab.string2ids(d)
+                d = self.vocab.string2ids(d)
+                if i % 2 == 1:
+                    d = [self.vocab.talker1_bos_id] + d + [self.vocab.talker1_eos_id]
+                else:
+                    d = [self.vocab.talker2_bos_id] + d + [self.vocab.talker2_eos_id]
+
                 self.history['dialog'].extend(d)
 
         observation['agent'] = self        
@@ -111,7 +117,7 @@ class TransformerAgent(Agent):
 
     def batch_act(self, observations):
         def is_valid_history(history):
-            return len(history['info']) or len(history['dialog'])
+            return len(history['dialog'])
 
         def to_tensor(string):
             ids = [self.vocab.bos_id] + self.vocab.string2ids(string) + [self.vocab.eos_id]
