@@ -61,7 +61,7 @@ def checkpoint_sequential(functions, segments, *inputs):
     return run_function(end + 1, len(functions) - 1, functions)(*inputs)
 
 
-def f1_score(predictions, targets):
+def f1_score(predictions, targets, average=True):
     def f1_score_items(pred_items, gold_items):
         common = Counter(gold_items) & Counter(pred_items)
         num_same = sum(common.values())
@@ -77,7 +77,10 @@ def f1_score(predictions, targets):
     
     scores = [f1_score_items(p, t) for p, t in zip(predictions, targets)]
 
-    return sum(scores) / len(scores)
+    if average:
+        return sum(scores) / len(scores)    
+
+    return scores
 
 
 def openai_transformer_config():

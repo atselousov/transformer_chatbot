@@ -53,6 +53,7 @@ def main():
                             lr=trainer_config.lr, 
                             lr_warmup=trainer_config.lr_warmup, 
                             lm_weight=trainer_config.lm_weight,
+                            risk_weight=trainer_config.risk_weight, 
                             n_jobs=trainer_config.n_jobs, 
                             clip_grad=trainer_config.clip_grad, 
                             device=device,
@@ -93,11 +94,16 @@ def main():
         if (epoch+1) % trainer_config.test_period == 0:
             metric_funcs = {'f1_score': f1_score}
             model_trainer.test(metric_funcs)
+    
+    def f1_risk(predictions, targets):
+        scores = f1_score(predictions, targets, average=False)
+        return [1-s for s in scores] 
+
     # helpers -----------------------------------------------------
     
 
     try:
-        model_trainer.train(trainer_config.n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func])
+        model_trainer.train(trainer_config.n_epochs, after_epoch_funcs=[save_func, sample_text_func, test_func], risk_func=f1_risk)
     except (KeyboardInterrupt, Exception, RuntimeError) as e:
         torch.save(model_trainer.state_dict(), trainer_config.interrupt_checkpoint_path)
         raise e

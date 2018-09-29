@@ -11,8 +11,8 @@ from .loss import LabelSmoothingLoss
 
 class Trainer:
     def __init__(self, model, train_dataset, test_dataset=None, batch_size=8,
-                 batch_split=1, lm_weight=0.5, lr=6.25e-5, lr_warmup=2000, n_jobs=0, 
-                 clip_grad=None, label_smoothing=0, device=torch.device('cuda'),
+                 batch_split=1, lm_weight=0.5, risk_weight=0, lr=6.25e-5, lr_warmup=2000, 
+                 n_jobs=0, clip_grad=None, label_smoothing=0, device=torch.device('cuda'),
                  ignore_idxs=[]):
         self.model = model.to(device)
         self.lm_criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx).to(device)
@@ -28,6 +28,7 @@ class Trainer:
 
         self.batch_split = batch_split
         self.lm_weight = lm_weight
+        self.risk_weight = risk_weight
         self.clip_grad = clip_grad
         self.device = device
         self.ignore_idxs = ignore_idxs
@@ -60,16 +61,19 @@ class Trainer:
 
         return contexts, y
 
-    def _eval_train(self, epoch):
+    def _eval_train(self, epoch, risk_func=None):
         self.model.train()
 
         tqdm_data = tqdm(self.train_dataloader, desc='Train (epoch #{})'.format(epoch))
         loss = 0
         lm_loss = 0
+        risk_loss = 0
         for i, (contexts, targets) in enumerate(tqdm_data):
             contexts, targets = [c.to(self.device) for c in contexts], targets.to(self.device)
             
             enc_contexts = []
+
+            # lm loss
             batch_lm_loss = 0
             for context in contexts:
                 enc_context = self.model.encode(context.clone())
@@ -83,12 +87,41 @@ class Trainer:
             
             batch_lm_loss /= len(contexts)
 
+            # s2s loss
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
             outputs = self.model.decode(prevs, enc_contexts)
             outputs = F.log_softmax(outputs, dim=-1)
             batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), nexts.view(-1))
             
-            full_loss = (batch_lm_loss * self.lm_weight + batch_loss) / self.batch_split
+            # risk loss
+            batch_risk_loss = torch.tensor(0, device=self.device)
+            if risk_func is not None and self.risk_weight > 0:
+
+                beams, beam_lens = self.model.beam_search(enc_contexts, return_beams=True)
+
+                target_lens = targets.ne(self.model.padding_idx).sum(dim=-1)
+                targets = [target[1:length-1].tolist() for target, length in zip(targets, target_lens)]
+                batch_risks = []
+                for b in range(beams.shape[1]):
+                    predictions = [b[1:l-1].tolist() for b, l in zip(beams[:, b, :], beam_lens[:, b])]
+                    risks = torch.tensor(risk_func(predictions, targets), dtype=torch.float, device=self.device)
+                    batch_risks.append(risks)
+                batch_risks = torch.stack(batch_risks, dim=-1)
+
+                batch_probas = []
+                for b in range(beams.shape[1]):
+                    logits = self.model.decode(beams[:, b, :-1], enc_contexts)
+                    probas = F.log_softmax(logits, dim=-1)
+                    probas = torch.gather(probas, -1, beams[:, b, 1:].unsqueeze(-1)).squeeze(-1)
+                    probas = torch.exp(probas.sum(dim=-1) / beam_lens[:, b].float())
+                    batch_probas.append(probas)
+                batch_probas = torch.stack(batch_probas, dim=-1)
+                batch_probas = F.softmax(batch_probas, dim=-1)
+                
+                batch_risk_loss = torch.mean((batch_risks * batch_probas).sum(dim=-1))
+            
+            # optimization
+            full_loss = (batch_lm_loss * self.lm_weight + self.risk_weight * batch_risk_loss + batch_loss) / self.batch_split
             full_loss.backward()
             
             if (i + 1) % self.batch_split == 0:
@@ -101,8 +134,9 @@ class Trainer:
 
             lm_loss = (i * lm_loss + batch_lm_loss.item()) / (i + 1)
             loss = (i * loss + batch_loss.item()) / (i + 1)
+            risk_loss = (i * risk_loss + batch_risk_loss.item()) / (i + 1)
 
-            tqdm_data.set_postfix({'lm_loss': lm_loss, 'loss': loss})
+            tqdm_data.set_postfix({'lm_loss': lm_loss, 'loss': loss, 'risk_loss': risk_loss})
 
     def _eval_test(self, metric_funcs={}):
         self.model.eval()
@@ -115,6 +149,8 @@ class Trainer:
             contexts, targets = [c.to(self.device) for c in contexts], targets.to(self.device)
             
             enc_contexts = []
+
+            # lm loss
             batch_lm_loss = 0
             for context in contexts:
                 enc_context = self.model.encode(context.clone())
@@ -128,6 +164,7 @@ class Trainer:
             
             batch_lm_loss /= len(contexts)
 
+            # s2s loss
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
             outputs = self.model.decode(prevs, enc_contexts)
             outputs = F.log_softmax(outputs, dim=-1)
@@ -149,9 +186,9 @@ class Trainer:
         if hasattr(self, 'test_dataloader'):
             self._eval_test(metric_funcs)
 
-    def train(self, epochs, after_epoch_funcs=[]):
+    def train(self, epochs, after_epoch_funcs=[], risk_func=None):
         for epoch in range(epochs):
-            self._eval_train(epoch)
+            self._eval_train(epoch, risk_func)
 
             for func in after_epoch_funcs:
                 func(epoch)

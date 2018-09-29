@@ -58,7 +58,7 @@ class TransformerModel(nn.Module):
         """https://arxiv.org/abs/1609.08144"""
         return (5 + sequence_lengths) ** self.length_penalty_coef / (5 + 1) ** self.length_penalty_coef
 
-    def beam_search(self, enc_contexts=[]):
+    def beam_search(self, enc_contexts=[], return_beams=False):
         with torch.no_grad():
             if len(enc_contexts) == 0:
                 return []
@@ -80,11 +80,11 @@ class TransformerModel(nn.Module):
                 p = p.view(-1, p.shape[2])
                 beam_enc_contexts.append((c, p))
             
-            current_sample_prob = self.annealing
+            current_sample_prob = 1
             for i in range(self.max_seq_len):
                 outputs, _ = self.transformer_module(prevs, beam_enc_contexts)
 
-                logits = self.pre_softmax(outputs[:, -1, :])
+                logits = self.generate(outputs[:, -1, :])
                 log_probs = F.log_softmax(logits, dim=-1)
                 log_probs = log_probs.view(batch_size, self.beam_size, -1)
 
@@ -110,13 +110,13 @@ class TransformerModel(nn.Module):
                 
                 sym_idxs = torch.fmod(idxs, log_probs.shape[-1])
                 is_end = torch.gather(is_end, 1, beam_idxs)
-                is_end[sym_idxs == self.eos_id] = 1
-        
                 beam_lens = torch.gather(beam_lens, 1, beam_idxs)
+
+                sym_idxs[is_end] = self.padding_idx
                 beam_lens[~is_end] += 1
+                is_end[sym_idxs == self.eos_id] = 1
 
                 sym_idxs = sym_idxs.view(batch_size * self.beam_size, 1)
-
                 prevs = prevs.view(batch_size, self.beam_size, -1)
                 prevs = torch.gather(prevs, 1, beam_idxs.unsqueeze(-1).repeat(1, 1, prevs.shape[-1]))
                 prevs = prevs.view(batch_size * self.beam_size, -1)
@@ -131,6 +131,9 @@ class TransformerModel(nn.Module):
             predicts = []
             result = prevs.view(batch_size, self.beam_size, -1)
 
+            if return_beams:
+                 return result, beam_lens
+
             if self.sample:
                 probs = F.softmax(beam_scores, dim=-1)
                 bests = torch.multinomial(probs, 1).view(-1)
@@ -139,7 +142,7 @@ class TransformerModel(nn.Module):
             
             for i in range(batch_size):
                 best_len = beam_lens[i, bests[i]]
-                best_seq = result[i, bests[i], 1:best_len]
+                best_seq = result[i, bests[i], 1:best_len-1]
                 predicts.append(best_seq.tolist())
                 
         return predicts
