@@ -5,7 +5,10 @@ from parlai.core.agents import Agent
 from model.transformer_model import TransformerModel
 from model.text import BPEVocab
 from model.utils import pad_sequence
+from model.postprocessing import ngram_replaser, ReplyChecker, detokenize
+from model.sentiment import pick_emoji
 from config import get_model_config
+import random
 
       
 class TransformerAgent(Agent):
@@ -33,6 +36,13 @@ class TransformerAgent(Agent):
 
         model_config = get_model_config()
         self.vocab = BPEVocab.from_files(model_config.bpe_vocab_path, model_config.bpe_codes_path)
+        self.reply_checker = ReplyChecker()
+
+        self.replace_repeat = model_config.replace_repeat
+        self.replace_ngram = model_config.replace_ngram
+        self.ngram_size = model_config.ngram_size
+        self.detokenize = model_config.detokenize
+        self.emoji_prob = model_config.emoji_prob
 
         if shared is None:
             self.model = TransformerModel(n_layers=model_config.n_layers,
@@ -91,6 +101,10 @@ class TransformerAgent(Agent):
         if 'text' in observation:
             text = observation['text']
             info, dialog = self._parse(text)
+
+            if info:
+                self.history['str_info'] = ' '.join(info)
+            self.history['str_dialog'].extend(dialog)
         
             info = sum([self.vocab.string2ids(i) for i in info], [])
             self.history['info'].extend(info)
@@ -112,7 +126,32 @@ class TransformerAgent(Agent):
         return observation
     
     def act(self):
-        return self.batch_act([self.observation])[0]       
+        return self.batch_act([self.observation])[0]
+
+    def postprocess_text(self, reply, agent):
+        str_reply = self.vocab.ids2string(reply)
+
+        # print('Original reply: ', str_reply)
+        if self.replace_repeat:
+            str_reply = agent.reply_checker.check_reply(str_reply,
+                                                        agent.history['str_dialog'][-1],
+                                                        agent.history['str_info'])
+            # print('After repeat replace: ', str_reply)
+
+        if self.replace_ngram:
+            str_reply = ngram_replaser(agent.history['str_info'], str_reply, n=self.ngram_size)
+            # print('After ngram replace: ', str_reply)
+
+        reply = self.vocab.string2ids(str_reply)
+
+        if self.detokenize:
+            str_reply = detokenize(str_reply)
+            # print('After detokenize: ', str_reply)
+
+        if random.uniform(0, 1) < self.emoji_prob:
+            str_reply = ' '.join([str_reply, pick_emoji(str_reply)])
+
+        return str_reply, reply
 
     def batch_act(self, observations):
         def is_valid_history(history):
@@ -121,7 +160,6 @@ class TransformerAgent(Agent):
         def to_tensor(string):
             ids = [self.vocab.bos_id] + self.vocab.string2ids(string) + [self.vocab.eos_id]
             return torch.tensor(ids, dtype=torch.long)
-
 
         batch_reply = [{'id': self.getID(), 'text': '', 'text_candidates': []} for _ in range(len(observations))]
         valid_ids = [i for i, obs in enumerate(observations) if is_valid_history(obs['agent'].history)]
@@ -132,7 +170,7 @@ class TransformerAgent(Agent):
 
         try:
             valid_observations = [observations[i] for i in valid_ids]
-            
+
             infos = [obs['agent'].history['info'][:self.model.n_pos_embeddings-3] for obs in valid_observations]
             infos = [([self.vocab.info_bos_id] + ifo + [self.vocab.info_eos_id] if len(ifo) else ifo) for ifo in infos]
             dialogs = [list(obs['agent'].history['dialog'])[-self.model.n_pos_embeddings+1:] for obs in valid_observations]
@@ -142,24 +180,24 @@ class TransformerAgent(Agent):
                 infos = [torch.tensor(i, dtype=torch.long) for i in infos]
                 infos = pad_sequence(infos, batch_first=True, padding_value=self.model.padding_idx)
                 if self.use_cuda:
-                    infos = infos.cuda() 
+                    infos = infos.cuda()
                 contexts.append(infos)
 
             if max(map(len, dialogs)) > 0:
                 dialogs = [torch.tensor(d, dtype=torch.long) for d in dialogs]
                 dialogs = pad_sequence(dialogs, batch_first=True, padding_value=self.model.padding_idx)
                 if self.use_cuda:
-                    dialogs = dialogs.cuda() 
+                    dialogs = dialogs.cuda()
                 contexts.append(dialogs)
 
             enc_contexts = [self.model.encode(c) for c in contexts]
             pred_texts = self.model.beam_search(enc_contexts)
 
             for i in range(batch_size):
-                pred_text = pred_texts[i]
+                pred_text_str, pred_text = self.postprocess_text(pred_texts[i], valid_observations[i]['agent'])
+
                 valid_observations[i]['agent'].history['dialog'].extend([self.vocab.talker2_bos_id] + pred_text)
-                pred_text = self.vocab.ids2string(pred_text)
-                batch_reply[valid_ids[i]]['text'] = pred_text
+                batch_reply[valid_ids[i]]['text'] = pred_text_str
 
             if self.opt['rank_candidates']:
                 candidates = [list(obs.get('label_candidates', [])) for obs in valid_observations]
@@ -174,22 +212,22 @@ class TransformerAgent(Agent):
                         current_cands = pad_sequence(current_cands, batch_first=True, padding_value=self.model.padding_idx)
                         if self.use_cuda:
                             current_cands = current_cands.cuda()
-                        
-                        logits = self.model.decode(current_cands[:, :-1], enc_contexts)                          
+
+                        logits = self.model.decode(current_cands[:, :-1], enc_contexts)
                         log_probas = F.log_softmax(logits, dim=-1)
                         log_probas = torch.gather(log_probas, -1, current_cands[:, 1:].unsqueeze(-1)).squeeze(-1)
                         log_probas.masked_fill_(current_cands[:, 1:].eq(self.model.padding_idx), 0)
 
                         current_lens = current_cands[:, 1:].ne(self.model.padding_idx).float().sum(dim=-1)
                         current_scores = log_probas.sum(dim=-1) / current_lens
-                        
+
                         for k, s in enumerate(current_scores):
                             if i < lens_candidates[k]:
                                 scores[k].append(s.item())
 
                     ranked_ids = [sorted(range(len(s)), key=lambda k: s[k], reverse=True) for s in scores]
                     ranked_strings = [[c[i] for i in ids] for ids, c in zip(ranked_ids, candidates)]
-                    
+
                     for i in range(batch_size):
                         batch_reply[valid_ids[i]]['text_candidates'] = ranked_strings[i]
 
@@ -207,7 +245,9 @@ class TransformerAgent(Agent):
         return shared
 
     def reset(self):
-        self.history = {'info': [], 'dialog': deque(maxlen=self.model.n_pos_embeddings-1)}
+        self.history = {'str_info': None, 'str_dialog': deque(maxlen=self.model.n_pos_embeddings-1),
+                        'info': [], 'dialog': deque(maxlen=self.model.n_pos_embeddings-1)}
         self.episode_done = True
         self.observation = None
+        self.reply_checker.clean()
 

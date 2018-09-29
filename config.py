@@ -16,11 +16,16 @@ def get_model_config():
                        'attn_dropout': default_config.attn_dropout,
                        'ff_dropout': default_config.ff_dropout,
                        'max_seq_len': 256,
-                       'beam_size': 1,
-                       'sample': False,
-                       'annealing': 0,
-                       'length_penalty': 0.8,
-                       'n_segments': None})
+                       'beam_size': 5,
+                       'sample': True,
+                       'annealing': 0.6,
+                       'length_penalty': 0.7,
+                       'n_segments': None,
+                       'replace_repeat': True,
+                       'replace_ngram': True,
+                       'detokenize': True,
+                       'emoji_prob': .2,
+                       'ngram_size': 3})
 
     return config
 
