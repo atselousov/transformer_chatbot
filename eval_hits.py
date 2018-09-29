@@ -6,7 +6,8 @@ if __name__ == '__main__':
 
     parser.set_defaults(model='agent:TransformerAgent',
                         rank_candidates=True,
-                        batchsize=10)
+                        batchsize=10,
+                        sample=False)
     opt = parser.parse_args()
     eval_hits(opt, print_parser=parser)
 

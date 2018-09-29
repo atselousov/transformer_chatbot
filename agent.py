@@ -23,6 +23,8 @@ class TransformerAgent(Agent):
                                      'available on the device.')
         agent_args.add_argument('--rank_candidates', type='bool', default=False,
                                 help='Whether the model should parse candidates for ranking.')
+        agent_args.add_argument('--sample', type='bool', default=True,
+                                help='Sampling of beam from beam search')
         
         return argparser
 
@@ -64,7 +66,7 @@ class TransformerAgent(Agent):
                                           beam_size=model_config.beam_size,  
                                           length_penalty=model_config.length_penalty,
                                           n_segments=model_config.n_segments,
-                                          sample=model_config.sample,
+                                          sample=self.opt['sample'],
                                           annealing=model_config.annealing)
             self.retrieval_bot = RetrievalBot()
 
