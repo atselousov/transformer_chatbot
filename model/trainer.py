@@ -3,10 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 import random
 from torch.utils.data import DataLoader
-from utils import pad_sequence
-from optim import Adam, NoamOpt
-from loss import LabelSmoothingLoss
 from tqdm import tqdm
+from .utils import pad_sequence
+from .optim import Adam, NoamOpt
+from .loss import LabelSmoothingLoss
 
 
 class Trainer:
@@ -42,17 +42,6 @@ class Trainer:
 
     def collate_func(self, data):
         persona_info, h, y = zip(*data)
-
-        # memory hack
-        '''max_seq_len = 640
-        if max(map(len, persona_info)) > max_seq_len or \
-           max(map(len, h)) > max_seq_len or \
-           max(map(len, y)) > max_seq_len:
-           idx = random.randint(0, len(data) - 1)
-           persona_info = [persona_info[idx]]
-           h = [h[idx]]
-           y = [y[idx]]'''
-
 
         contexts = []
 
@@ -128,7 +117,7 @@ class Trainer:
             enc_contexts = []
             batch_lm_loss = 0
             for context in contexts:
-                enc_context = self.model.encode(contextcontext.clone())
+                enc_context = self.model.encode(context.clone())
                 enc_contexts.append(enc_context)
 
                 context_outputs = self.model.generate(enc_context[0])

@@ -12,7 +12,7 @@ def main():
     model_config = get_model_config()
     trainer_config = get_trainer_config()
 
-    set_seed(trainder_config.seed)
+    set_seed(trainer_config.seed)
     device = torch.device(trainer_config.device)
 
     vocab = BPEVocab.from_files(model_config.bpe_vocab_path, model_config.bpe_codes_path)
@@ -79,6 +79,7 @@ def main():
             persona_info_str = vocab.ids2string(persona_info[1:-1])
             dialog_str = vocab.ids2string(dialog)
             dialog_str = dialog_str.replace(vocab.talker1_bos, '\n\t- ').replace(vocab.talker2_bos, '\n\t- ')
+            dialog_str = dialog_str.replace(vocab.talker1_eos, '').replace(vocab.talker2_eos, '')
             target_str = vocab.ids2string(target[1:-1])
             prediction_str = vocab.ids2string(prediction)
 

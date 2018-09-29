@@ -1,6 +1,7 @@
+import random
 import torch
 from torch.utils.data import Dataset
-from text import BPEVocab
+from .text import BPEVocab
 
 
 class FacebookDataset(Dataset):
@@ -39,45 +40,57 @@ class FacebookDataset(Dataset):
     @staticmethod
     def make_dataset(data, vocab, max_lengths):
         dataset = []
-        for dialog in data:
-            persona_info = ' '.join([s for s in dialog['persona_info']])
-            persona_info = [vocab.info_bos_id] + vocab.string2ids(persona_info) + [vocab.info_eos_id]
+        for chat in data:
+            persona_info = [vocab.string2ids(s) for s in chat['persona_info']]
+            dialog = [vocab.string2ids(s) for s in chat['dialog']]
 
-            dialog_x = []
-            for i, string in enumerate(dialog['dialog'], 1):
-                ids = vocab.string2ids(string)
-
-                if i % 2 == 1:
-                    ids = [vocab.talker1_bos_id] + ids + [vocab.talker1_eos_id]
-                else:
-                    dialog_y = [vocab.bos_id] + ids + [vocab.eos_id]
-                    dataset_item = (persona_info[:max_lengths],
-                                    dialog_x[-max_lengths:],
-                                    dialog_y[:max_lengths])
-                    dataset.append(dataset_item)
-
-                    ids = [vocab.talker2_bos_id] + ids + [vocab.talker2_eos_id]
-
-                dialog_x.extend(ids)
-                
-        '''split_size = 100000
-        n = max(len(dataset) // split_size, 1)
-        dataset = [dataset[i::n] for i in range(n)]
-        dataset = [sorted(d, key=lambda x: (len(x[1]), len(x[0]), len(x[2]))) for d in dataset]
-        dataset = sum(dataset, [])'''
+            if len(dialog) % 2 == 1:
+                dialog = dialog[:-1]
+           
+            dataset.append((persona_info, dialog))
 
         return dataset
 
-    def __init__(self, paths, vocab, max_lengths=2048):
+    def __init__(self, paths, vocab, max_lengths=2048, min_infos=2):
+        assert min_infos > 0             
+
         if isinstance(paths, str):
             paths = [paths]
         
-        self.data = sum([FacebookDataset.parse_data(path) for path in paths], [])
-        self.data = FacebookDataset.make_dataset(self.data, vocab, max_lengths)
+        self.vocab = vocab
+        self.max_lengths = max_lengths
+        self.min_infos = min_infos
+
+        parsed_data = sum([FacebookDataset.parse_data(path) for path in paths], [])
+        self.data = FacebookDataset.make_dataset(parsed_data, vocab, max_lengths)
 
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        persona_info, h, y = self.data[idx]
+        persona_info, dialog = self.data[idx]
+
+        if len(persona_info):
+            n_info_samples = max(self.min_infos, random.randint(1, len(persona_info)))
+            n_info_samples = min(n_info_samples, len(persona_info))
+            persona_info = random.sample(persona_info, n_info_samples)
+            random.shuffle(persona_info)
+            persona_info = sum(persona_info, []) 
+            persona_info = [self.vocab.info_bos_id] + persona_info[:self.max_lengths-2] + [self.vocab.info_eos_id]
+
+        dialog_begin = 0
+        dialog_end = random.randrange(2, len(dialog)+1, 2)
+
+        h = []
+        for i, ids in enumerate(dialog[dialog_begin:dialog_end-1], 1):
+            if i % 2 == 1:
+                ids = [self.vocab.talker1_bos_id] + ids + [self.vocab.talker1_eos_id]
+            else:
+                ids = [self.vocab.talker2_bos_id] + ids + [self.vocab.talker2_eos_id]
+            h.extend(ids)
+        h = h[-self.max_lengths:]
+
+        y = [self.vocab.bos_id] + dialog[dialog_end-1] + [self.vocab.eos_id]
+        y = y[:self.max_lengths]
+
         return persona_info, h, y

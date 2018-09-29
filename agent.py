@@ -92,8 +92,7 @@ class TransformerAgent(Agent):
             text = observation['text']
             info, dialog = self._parse(text)
         
-            info = [self.vocab.string2ids(i) for i in info]
-            info = [self.vocab.info_bos_id] + sum(info, []) + [self.vocab.info_eos_id]
+            info = sum([self.vocab.string2ids(i) for i in info], [])
             self.history['info'].extend(info)
 
             for i, d in enumerate(dialog, 1):
@@ -109,7 +108,7 @@ class TransformerAgent(Agent):
 
         self.episode_done = observation['episode_done']
         self.observation = observation
-
+        
         return observation
     
     def act(self):
@@ -133,8 +132,9 @@ class TransformerAgent(Agent):
 
         try:
             valid_observations = [observations[i] for i in valid_ids]
-
-            infos = [obs['agent'].history['info'][:self.model.n_pos_embeddings-1] for obs in valid_observations]
+            
+            infos = [obs['agent'].history['info'][:self.model.n_pos_embeddings-3] for obs in valid_observations]
+            infos = [([self.vocab.info_bos_id] + ifo + [self.vocab.info_eos_id] if len(ifo) else ifo) for ifo in infos]
             dialogs = [list(obs['agent'].history['dialog'])[-self.model.n_pos_embeddings+1:] for obs in valid_observations]
             contexts = []
 
