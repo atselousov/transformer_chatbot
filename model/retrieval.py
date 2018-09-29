@@ -1,12 +1,14 @@
 import random
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
-from pprint import pprint
 import re
 from tqdm import tqdm
 import difflib
 
 from .sentiment import get_mood
+
+
+DIALOG_SIZE = 3
 
 
 def make_documents(file, index_name):
@@ -43,6 +45,9 @@ class RetrievalBot:
         # todo: set host
         self.es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
 
+        if not self.es.ping():
+            raise ValueError('Connection to retrieval server is failed.')
+
         if update_index:
             assert raw_index_path is not None
 
@@ -54,6 +59,8 @@ class RetrievalBot:
     def _match_data(self, weights, dialog, info, use_sentiment, num_matches):
 
         names = ['d1', 'd2', 'd3']
+
+        dialog = dialog[-DIALOG_SIZE:]
 
         assert isinstance(dialog, list)
         assert len(dialog) == len(weights) - 2
@@ -79,14 +86,14 @@ class RetrievalBot:
 
         return res
 
-    def get_response(self, dialog, info=None, use_sentiment=False, num_matches=10):
+    def get_response(self, dialog, info=None, use_sentiment=False, num_matches=10, return_all=False):
         # d1, d2, d3, info, sentiment
         weights = [1, 1, 3, 1, 1]
         res = self._match_data(weights, dialog, info, use_sentiment, num_matches)
         res = res['hits']
 
         if res['total'] == 0:
-            return ''
+            return None
 
         max_score = res['max_score']
         res = res['hits']
@@ -94,10 +101,13 @@ class RetrievalBot:
         responses = []
 
         for h in res:
-            if h['_score'] == max_score:
+            if h['_score'] == max_score or return_all:
                 responses.append(h['_source']['response'])
 
-        return random.choice(responses)
+        if return_all:
+            return list(set(responses))
+        else:
+            return random.choice(responses)
 
     def generate_question(self, dialog, info=None, use_sentiment=False, num_matches=20, only_with_qwords=True,
                           return_list=False):
@@ -144,7 +154,8 @@ class RetrievalBot:
                     break
 
             if res:
-                res = random.choice(res).strip()
+                if not return_list:
+                    res = random.choice(res).strip()
             else:
                 res = None
 

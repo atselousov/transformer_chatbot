@@ -6,6 +6,7 @@ from model.transformer_model import TransformerModel
 from model.text import BPEVocab
 from model.utils import pad_sequence
 from model.postprocessing import ngram_replaser, ReplyChecker, detokenize
+from model.retrieval import RetrievalBot, DIALOG_SIZE
 from model.sentiment import pick_emoji
 from config import get_model_config
 import random
@@ -43,6 +44,8 @@ class TransformerAgent(Agent):
         self.ngram_size = model_config.ngram_size
         self.detokenize = model_config.detokenize
         self.emoji_prob = model_config.emoji_prob
+        self.add_questions = model_config.add_questions
+        self.beam_size = model_config.beam_size
 
         if shared is None:
             self.model = TransformerModel(n_layers=model_config.n_layers,
@@ -63,6 +66,7 @@ class TransformerAgent(Agent):
                                           n_segments=model_config.n_segments,
                                           sample=model_config.sample,
                                           annealing=model_config.annealing)
+            self.retrieval_bot = RetrievalBot()
 
             state_dict = torch.load(model_config.checkpoint_path, map_location=lambda storage, loc: storage)
             if 'model' in state_dict:
@@ -78,10 +82,12 @@ class TransformerAgent(Agent):
 
         else:
             self.model = shared['model']
+            self.retrieval_bot = shared['retrieval']
 
         self.reset()
 
     def _parse(self, text):
+        # todo: fix grammar mistakes?
         persona_info = []
         dialog = []
         for subtext in text.split('\n'):
@@ -137,6 +143,14 @@ class TransformerAgent(Agent):
                                                         agent.history['str_dialog'][-1],
                                                         agent.history['str_info'])
             # print('After repeat replace: ', str_reply)
+
+        if self.beam_size > 1 and random.uniform(0, 1) < self.add_questions and '?' not in str_reply:
+            question = self.retrieval_bot.generate_question(list(agent.history['str_dialog']),
+                                                            agent.history['str_info'])
+            if question is not None and question not in str_reply:
+                str_reply = ' '.join([str_reply, question])
+
+        # print('Question: ', question)
 
         if self.replace_ngram:
             str_reply = ngram_replaser(agent.history['str_info'], str_reply, n=self.ngram_size)
@@ -232,7 +246,7 @@ class TransformerAgent(Agent):
                         batch_reply[valid_ids[i]]['text_candidates'] = ranked_strings[i]
 
         except Exception as e:
-            #raise e
+            raise e
             print(e)
 
         return batch_reply
@@ -241,11 +255,12 @@ class TransformerAgent(Agent):
         shared = super(TransformerAgent, self).share()
         shared['opt'] = self.opt
         shared['model'] = self.model
+        shared['retrieval'] = self.retrieval_bot
 
         return shared
 
     def reset(self):
-        self.history = {'str_info': None, 'str_dialog': deque(maxlen=self.model.n_pos_embeddings-1),
+        self.history = {'str_info': None, 'str_dialog': deque(DIALOG_SIZE * ['None'], maxlen=DIALOG_SIZE),
                         'info': [], 'dialog': deque(maxlen=self.model.n_pos_embeddings-1)}
         self.episode_done = True
         self.observation = None

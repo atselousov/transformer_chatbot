@@ -24,8 +24,9 @@ def get_model_config():
                        'replace_repeat': True,
                        'replace_ngram': True,
                        'detokenize': True,
-                       'emoji_prob': .2,
-                       'ngram_size': 3})
+                       'emoji_prob': 0.2,
+                       'ngram_size': 3,
+                       'add_questions': .2})
 
     return config
 
