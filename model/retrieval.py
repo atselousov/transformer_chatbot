@@ -60,9 +60,11 @@ class RetrievalBot:
 
         names = ['d1', 'd2', 'd3']
 
+        assert isinstance(dialog, list)
+
+        dialog = DIALOG_SIZE * ['None'] + dialog
         dialog = dialog[-DIALOG_SIZE:]
 
-        assert isinstance(dialog, list)
         assert len(dialog) == len(weights) - 2
         assert len(dialog) == len(names)
 

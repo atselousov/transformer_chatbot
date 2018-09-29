@@ -15,12 +15,24 @@ STANDARD_ANSWERS = ['i think you are interesting person. tell me something about
 
 
 def syntax_fix(text):
+    def _i_replace(text):
+        text = text.split()
+        for i in range(len(text)):
+            if text[i] == 'i':
+                text[i] = 'I'
+            if text[i] == 'i\'m':
+                text[i] = 'I\'m'
+
+        text = ' '.join(text)
+
+        return text
+
     tool = language_check.LanguageTool('en-US')
 
     matches = tool.check(text)
     matches = [m for m in matches if text[m.fromx:m.tox].lower() not in SPELL_EXCEPTIONS]
 
-    return language_check.correct(text, matches)
+    return _i_replace(language_check.correct(text, matches))
 
 
 def detokenize(text):
