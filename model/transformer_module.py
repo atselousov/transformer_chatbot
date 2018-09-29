@@ -2,8 +2,8 @@ import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from .utils import checkpoint_sequential
+
 
 class MultiheadAttention(nn.Module):
     @classmethod
@@ -133,10 +133,11 @@ class TransformerBlock(nn.Module):
         inputs = (x, padding_mask) + contexts
 
         full_attn = 0
+        n_attn = len(inputs) // 2
         for i in range(0, len(inputs), 2):
             c, m = inputs[i], inputs[i+1].byte()
             a = self.attn(x, c, c, m)
-            full_attn += a
+            full_attn += (a / n_attn)
 
         full_attn = self.dropout(full_attn)
         x = self.attn_norm(x + full_attn)
