@@ -18,13 +18,35 @@ class TransformerAgent(Agent):
         agent_args = argparser.add_argument_group('Agent parameters')
         agent_args.add_argument('-gpu', '--gpu', type=int, default=-1, 
                                 help='which GPU to use')
-        agent_args.add_argument('--no-cuda', type='bool', default=False,
+        agent_args.add_argument('--no-cuda', type=bool, default=False,
                                 help='disable GPUs even if available. otherwise, will use GPUs if '
                                      'available on the device.')
-        agent_args.add_argument('--rank_candidates', type='bool', default=False,
+        agent_args.add_argument('--rank_candidates', type=bool, default=False,
                                 help='Whether the model should parse candidates for ranking.')
-        agent_args.add_argument('--sample', type='bool', default=False,
+        agent_args.add_argument('--sample', type=bool, default=False,
                                 help='Sampling of beam from beam search')
+        agent_args.add_argument('--uebok_mod', type=bool, default=False,
+                                help='https://cs4.pikabu.ru/images/big_size_comm/2014-10_4/14135339629138.jpg')
+        agent_args.add_argument('--replace_repeat', type=bool, default=True,
+                                help='')
+        agent_args.add_argument('--replace_ngram', type=bool, default=True,
+                                help='')
+        agent_args.add_argument('--detokenize', type=bool, default=True,
+                                help='')
+        agent_args.add_argument('--emoji_prob', type=float, default=0.5,
+                                help='')
+        agent_args.add_argument('--ngram_size', type=int, default=3,
+                                help='')
+        agent_args.add_argument('--add_questions', type=float, default=0.3,
+                                help='')
+        agent_args.add_argument('--clean_emoji', type=bool, default=True,
+                                help='')
+        agent_args.add_argument('--check_grammar', type=bool, default=True,
+                                help='')
+        agent_args.add_argument('--correct_generative', type=bool, default=True,
+                                help='')
+        agent_args.add_argument('--split_into_sentences', type=bool, default=True,
+                                help='')
         
         return argparser
 
@@ -39,19 +61,19 @@ class TransformerAgent(Agent):
 
         model_config = get_model_config()
         self.vocab = BPEVocab.from_files(model_config.bpe_vocab_path, model_config.bpe_codes_path)
-        self.reply_checker = ReplyChecker(correct_generative=model_config.correct_generative,
-                                          split_into_sentences=model_config.split_into_sentences)
+        self.reply_checker = ReplyChecker(correct_generative=self.opt['correct_generative'],
+                                          split_into_sentences=self.opt['split_into_sentences'])
 
-        self.replace_repeat = model_config.replace_repeat
-        self.replace_ngram = model_config.replace_ngram
-        self.ngram_size = model_config.ngram_size
-        self.detokenize = model_config.detokenize
-        self.emoji_prob = model_config.emoji_prob
-        self.add_questions = model_config.add_questions
+        self.replace_repeat = self.opt['replace_repeat']
+        self.replace_ngram = self.opt['replace_ngram']
+        self.ngram_size = self.opt['ngram_size']
+        self.detokenize = self.opt['detokenize']
+        self.emoji_prob = self.opt['emoji_prob']
+        self.add_questions = self.opt['add_questions']
         self.beam_size = model_config.beam_size
 
-        self.clean_emoji = model_config.clean_emoji
-        self.check_grammar = model_config.check_grammar
+        self.clean_emoji = self.opt['clean_emoji']
+        self.check_grammar = self.opt['check_grammar']
 
         if shared is None:
             self.model = TransformerModel(n_layers=model_config.n_layers,
@@ -96,14 +118,11 @@ class TransformerAgent(Agent):
         self.reset()
 
     def _preprocess_text(self, text):
-        # print('Original text: ', text)
         if self.clean_emoji:
             text = clean_emoji(text)
-            # print('After emoji clean: ', text)
 
         if self.check_grammar:
             text = syntax_fix(text).lower()
-            # print('After syntax fix: ', text)
 
         return text
 
@@ -282,4 +301,3 @@ class TransformerAgent(Agent):
         self.episode_done = True
         self.observation = None
         self.reply_checker.clean()
-

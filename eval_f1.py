@@ -6,7 +6,18 @@ if __name__ == '__main__':
 
     parser.set_defaults(model='agent:TransformerAgent',
                         batchsize=10,
-                        sample=False)
+                        rank_candidates=False,
+                        sample=False,
+                        uebok_mod=False,
+                        replace_repeat=True,
+                        replace_ngram=False,
+                        detokenize=False,
+                        emoji_prob=0,
+                        add_questions=0,
+                        clean_emoji=True,
+                        check_grammar=True,
+                        correct_generative=True,
+                        split_into_sentences=True)
     opt = parser.parse_args()
     eval_f1(opt, print_parser=parser)
 

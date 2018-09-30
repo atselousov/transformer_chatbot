@@ -19,22 +19,10 @@ def get_model_config():
                        'beam_size': 1,
                        'diversity_coef': 0,
                        'diversity_groups': 1, 
-                       'sample': False, # only for training, not for agent
                        'annealing_topk': None,
                        'annealing': 0,
                        'length_penalty': 0.6,
-                       'n_segments': None,
-                       # agent parameters
-                       'replace_repeat': True,
-                       'replace_ngram': True,
-                       'detokenize': True,
-                       'emoji_prob': 0.5,
-                       'ngram_size': 3,
-                       'add_questions': .3,
-                       'clean_emoji': True,
-                       'check_grammar': True,
-                       'correct_generative': True,
-                       'split_into_sentences': True})
+                       'n_segments': None})
 
     if config.annealing_topk is not None:
         assert config.annealing_topk > config.beam_size

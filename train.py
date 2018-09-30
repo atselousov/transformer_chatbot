@@ -33,7 +33,6 @@ def main():
                                    beam_size=model_config.beam_size,  
                                    length_penalty=model_config.length_penalty,
                                    n_segments=model_config.n_segments,
-                                   sample=model_config.sample,
                                    annealing_topk=model_config.annealing_topk,
                                    annealing=model_config.annealing,
                                    diversity_coef=model_config.diversity_coef,
