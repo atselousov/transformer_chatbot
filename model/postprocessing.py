@@ -189,7 +189,7 @@ class ReplyChecker:
             print('ERROR: ', e)
             reply = log[0]
 
-        print('[' + ' | '.join([n + str(v) for n, v in zip(log_names, log) ]) + ']')
+        # print('[' + ' | '.join([n + str(v) for n, v in zip(log_names, log) ]) + ']')
         self._replies.append(reply)
 
         return reply

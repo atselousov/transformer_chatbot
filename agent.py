@@ -315,7 +315,7 @@ class TransformerAgent(Agent):
                         batch_reply[valid_ids[i]]['text_candidates'] = ranked_strings[i]
 
         except Exception as e:
-            raise e
+            # raise e
             print(e)
 
         return batch_reply
