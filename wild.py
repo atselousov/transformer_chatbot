@@ -2,6 +2,7 @@ from convai_world import ConvAIWorld
 from parlai.core.params import ParlaiParser
 from agent import TransformerAgent
 
+
 def main():
     parser = ParlaiParser(True, True)
     parser.set_defaults(batchsize=10,

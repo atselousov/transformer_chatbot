@@ -15,7 +15,16 @@ model: TODO
 
 ### How to run
 
-TODO
+The easiest way to prepare environment is to run script `prepere_environment.sh`.
+After that docker container with retrieval server must be run in demon mode and 
+image with `transformer_chatbot` must be built.
+
+Retrieval server can be run with script `run_retrieval_servet.sh`. 
+Server do not need the internet connection for its work, connection with 
+`transformer_chatbot` goes on through port `9200`.
+
+After preparations metrics can be evaluated with corresponding `.sh` scripts or
+in interactive container run.
 
 ### Metrics
 
