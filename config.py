@@ -24,9 +24,11 @@ def get_model_config():
                        'replace_repeat': True,
                        'replace_ngram': True,
                        'detokenize': True,
-                       'emoji_prob': 0.2,
+                       'emoji_prob': 0.5,
                        'ngram_size': 3,
-                       'add_questions': .2})
+                       'add_questions': .3,
+                       'clean_emoji': True,
+                       'check_grammar': True})
 
     return config
 

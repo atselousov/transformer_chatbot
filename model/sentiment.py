@@ -1,6 +1,7 @@
 from nltk.sentiment import SentimentIntensityAnalyzer
 import numpy as np
 import emoji
+import re
 
 
 def get_sentiments(text):
@@ -46,5 +47,10 @@ def pick_emoji(text):
     # prob = sentiments[label]
     # if np.random.uniform(0, 1) > prob:
     #     return ''
+    return emoji.emojize(np.random.choice(smiles[label]), use_aliases=True)
 
-    return np.random.choice(smiles[label])
+
+def clean_emoji(text):
+    text = emoji.get_emoji_regexp().sub(r'', text)
+    text = re.sub(r'[\^:)(]', '', text)
+    return text.strip()

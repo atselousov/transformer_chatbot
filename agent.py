@@ -5,9 +5,9 @@ from parlai.core.agents import Agent
 from model.transformer_model import TransformerModel
 from model.text import BPEVocab
 from model.utils import pad_sequence
-from model.postprocessing import ngram_replaser, ReplyChecker, detokenize
+from model.postprocessing import ngram_replaser, ReplyChecker, detokenize, syntax_fix
 from model.retrieval import RetrievalBot, DIALOG_SIZE
-from model.sentiment import pick_emoji
+from model.sentiment import pick_emoji, clean_emoji
 from config import get_model_config
 import random
 
@@ -49,6 +49,9 @@ class TransformerAgent(Agent):
         self.add_questions = model_config.add_questions
         self.beam_size = model_config.beam_size
 
+        self.clean_emoji = model_config.clean_emoji
+        self.check_grammar = model_config.check_grammar
+
         if shared is None:
             self.model = TransformerModel(n_layers=model_config.n_layers,
                                           n_embeddings=len(self.vocab),
@@ -88,6 +91,18 @@ class TransformerAgent(Agent):
 
         self.reset()
 
+    def _preprocess_text(self, text):
+        # print('Original text: ', text)
+        if self.clean_emoji:
+            text = clean_emoji(text)
+            # print('After emoji clean: ', text)
+
+        if self.check_grammar:
+            text = syntax_fix(text).lower()
+            # print('After syntax fix: ', text)
+
+        return text
+
     def _parse(self, text):
         # todo: fix grammar mistakes?
         persona_info = []
@@ -96,8 +111,10 @@ class TransformerAgent(Agent):
             subtext = subtext.strip()
             if subtext.startswith('your persona:'):
                 subtext = subtext.replace('your persona:', '').strip()
+                subtext = self._preprocess_text(subtext).strip()
                 persona_info.append(subtext)
             else:
+                subtext = self._preprocess_text(subtext).strip()
                 dialog.append(subtext)
 
         return persona_info, dialog
@@ -136,7 +153,7 @@ class TransformerAgent(Agent):
     def act(self):
         return self.batch_act([self.observation])[0]
 
-    def postprocess_text(self, reply, agent):
+    def _postprocess_text(self, reply, agent):
         str_reply = self.vocab.ids2string(reply)
 
         # print('Original reply: ', str_reply)
@@ -210,7 +227,7 @@ class TransformerAgent(Agent):
             pred_texts = self.model.beam_search(enc_contexts)
 
             for i in range(batch_size):
-                pred_text_str, pred_text = self.postprocess_text(pred_texts[i], valid_observations[i]['agent'])
+                pred_text_str, pred_text = self._postprocess_text(pred_texts[i], valid_observations[i]['agent'])
 
                 valid_observations[i]['agent'].history['dialog'].extend([self.vocab.talker2_bos_id] + pred_text)
                 batch_reply[valid_ids[i]]['text'] = pred_text_str
