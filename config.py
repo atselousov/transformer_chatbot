@@ -29,7 +29,8 @@ def get_model_config():
                        'add_questions': .3,
                        'clean_emoji': True,
                        'check_grammar': True,
-                       'correct_generative': True})
+                       'correct_generative': True,
+                       'split_into_sentences': True})
 
     return config
 

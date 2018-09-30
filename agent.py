@@ -39,7 +39,8 @@ class TransformerAgent(Agent):
 
         model_config = get_model_config()
         self.vocab = BPEVocab.from_files(model_config.bpe_vocab_path, model_config.bpe_codes_path)
-        self.reply_checker = ReplyChecker(correct_generative=model_config.correct_generative)
+        self.reply_checker = ReplyChecker(correct_generative=model_config.correct_generative,
+                                          split_into_sentences=model_config.split_into_sentences)
 
         self.replace_repeat = model_config.replace_repeat
         self.replace_ngram = model_config.replace_ngram

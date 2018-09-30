@@ -14,7 +14,7 @@ from itertools import combinations
 
 SPELL_EXCEPTIONS = ['lol']
 STANDARD_ANSWERS = ['do you wanna talk about something else? ',
-                    'tell me something else about yourself.',
+                    'tell me something about yourself.',
                     'it is interesting. how is it outside?',
                     'do you like walking outside?',
                     'cats... do you like cats!',
@@ -57,13 +57,15 @@ def detokenize(text):
 
 
 class ReplyChecker:
-    def __init__(self, max_len=10, theshold=0.8, correct_generative=True):
+    def __init__(self, max_len=10, theshold=0.8, correct_generative=True, split_into_sentences=True):
         self._replies = deque([], maxlen=max_len)
         self._theshold = theshold
         self._retrieval = RetrievalBot()
         self._info = None
         self._max_len = max_len
+
         self._correct_generative = correct_generative
+        self._split_into_sentences = split_into_sentences
 
         self._reset_prob()
 
@@ -74,13 +76,50 @@ class ReplyChecker:
         # todo: only works good for same sequences
         return difflib.SequenceMatcher(None, seq1, seq2).ratio()
 
+    def _sentence_max_coincidence_drop(self, reply):
+        history = sum([re.split(r' *[\?\.\!][\'"\)\]]* *', r) for r in self._replies], [])
+
+        split_reply = re.split(r' *[\?\.\!][\'"\)\]]* *', reply)
+        punc = list(re.finditer(r' *[\?\.\!][\'"\)\]]* *', reply))
+
+        # ratio = 0
+        drop = []
+
+        for i, r in enumerate(split_reply):
+            for h in history:
+                if h and r:
+                    ratio = self._ratio(r, h)
+                    if ratio > self._theshold:
+                        drop.append(i)
+
+        drop = sorted(set(drop), reverse=True)
+        for d in drop:
+            split_reply.pop(d)
+            punc.pop(d)
+
+        original_text = ''
+
+        for s, m in zip(split_reply, punc):
+            original_text += s + m.group()
+        if len(split_reply) > len(punc):
+            original_text += split_reply[-1]
+
+        return original_text.strip()
+
     def _max_coincidence(self, reply):
         if not self._replies:
-            return None
+            return None, reply
+
+        if self._split_into_sentences:
+            reply = self._sentence_max_coincidence_drop(reply)
+            if not reply:
+                return 1.0, reply
 
         mc = max(self._replies, key=lambda x: self._ratio(x, reply))
 
-        return mc
+        ratio = self._ratio(mc, reply)
+
+        return ratio, reply
 
     def _replase_reply(self, reply, request, info):
         dialog = 2 * ['None'] + [request]
@@ -130,18 +169,27 @@ class ReplyChecker:
         return original_text
 
     def check_reply(self, reply, request, info):
+        log = [reply]
+        log_names = ['IN: ', 'RL: ', 'RS: ']
 
-        if self._correct_generative:
-            reply = ReplyChecker._correct_repeated_sentences(reply)
+        try:
+            if self._correct_generative:
+                reply = ReplyChecker._correct_repeated_sentences(reply)
 
-        mc = self._max_coincidence(reply)
+            ratio, reply = self._max_coincidence(reply)
+            log.append(reply)
+            if ratio is not None:
+                # ratio = self._ratio(mc, reply)
 
-        if mc is not None:
-            ratio = self._ratio(mc, reply)
+                if ratio > self._theshold:
+                    reply = self._replase_reply(reply, request, info)
+                    log.append(reply)
 
-            if ratio > self._theshold:
-                reply = self._replase_reply(reply, request, info)
+        except Exception as e:
+            print('ERROR: ', e)
+            reply = log[0]
 
+        print('[' + ' | '.join([n + str(v) for n, v in zip(log_names, log) ]) + ']')
         self._replies.append(reply)
 
         return reply
