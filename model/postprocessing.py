@@ -9,6 +9,7 @@ import random
 from .retrieval import RetrievalBot
 import re
 import numpy as np
+from itertools import combinations
 
 
 SPELL_EXCEPTIONS = ['lol']
@@ -56,12 +57,13 @@ def detokenize(text):
 
 
 class ReplyChecker:
-    def __init__(self, max_len=10, theshold=0.8):
+    def __init__(self, max_len=10, theshold=0.8, correct_generative=True):
         self._replies = deque([], maxlen=max_len)
         self._theshold = theshold
         self._retrieval = RetrievalBot()
         self._info = None
         self._max_len = max_len
+        self._correct_generative = correct_generative
 
         self._reset_prob()
 
@@ -103,7 +105,35 @@ class ReplyChecker:
 
         return res
 
+    @staticmethod
+    def _correct_repeated_sentences(text):
+        split_text = re.split(r' *[\?\.\!][\'"\)\]]* *', text)
+        matches = list(re.finditer(r' *[\?\.\!][\'"\)\]]* *', text))
+
+        drop = []
+        for i, j in combinations(range(len(split_text)), 2):
+            if split_text[j] and split_text[j] in split_text[i]:
+                drop.append(j)
+        drop = set(drop)
+        drop = sorted(drop, reverse=True)
+
+        for d in drop:
+            split_text.pop(d)
+            matches.pop(d)
+
+        original_text = ''
+
+        for s, m in zip(split_text, matches):
+            original_text += s + m.group()
+        if len(split_text) > len(matches):
+            original_text += split_text[-1]
+        return original_text
+
     def check_reply(self, reply, request, info):
+
+        if self._correct_generative:
+            reply = ReplyChecker._correct_repeated_sentences(reply)
+
         mc = self._max_coincidence(reply)
 
         if mc is not None:

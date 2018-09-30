@@ -28,7 +28,8 @@ def get_model_config():
                        'ngram_size': 3,
                        'add_questions': .3,
                        'clean_emoji': True,
-                       'check_grammar': True})
+                       'check_grammar': True,
+                       'correct_generative': True})
 
     return config
 
