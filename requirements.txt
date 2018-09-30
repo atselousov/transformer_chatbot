@@ -9,3 +9,4 @@ elasticsearch==6.3.1
 nltk==3.2.5
 emoji==0.5.0
 mosestokenizer==1.0.0
+language-check==1.1
