@@ -1,5 +1,23 @@
-ConvAI2
+# ConvAI2
+# Team: Lost in Conversation /2
 
-Datasets: https://www.dropbox.com/s/msool5hinh85zkv/datasets.zip?dl=1
 
-OpenAI parameters: https://www.dropbox.com/s/hlf7153xytli4e9/parameters.zip?dl=1
+### Links
+
+vocabulary: https://www.dropbox.com/s/n2jbjyq32x6jgr6/parameters.zip?dl=1
+model: TODO
+
+### Team
+
+* Alexander Tselousov aleksander.tselousov@yandex.ru
+* Sergey Golovanov Sergey_XG@mail.ru
+
+### How to run
+
+TODO
+
+### Metrics
+
+f1: ?
+
+hits: ?
