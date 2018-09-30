@@ -15,20 +15,14 @@ def get_model_config():
                        'embed_dropout': default_config.embed_dropout,
                        'attn_dropout': default_config.attn_dropout,
                        'ff_dropout': default_config.ff_dropout,
-                       'max_seq_len': 128,
-                       'beam_size': 1,
-                       'diversity_coef': 0,
-                       'diversity_groups': 1, 
-                       'annealing_topk': None,
-                       'annealing': 0,
-                       'length_penalty': 0.6,
+                       # 'max_seq_len': 128,
+                       # 'beam_size': 1,
+                       # 'diversity_coef': 0,
+                       # 'diversity_groups': 1,
+                       # 'annealing_topk': None,
+                       # 'annealing': 0,
+                       # 'length_penalty': 0.6,
                        'n_segments': None})
-
-    if config.annealing_topk is not None:
-        assert config.annealing_topk > config.beam_size
-    
-    assert config.diversity_coef >= 0
-    assert config.beam_size % config.diversity_groups == 0
 
     return config
 

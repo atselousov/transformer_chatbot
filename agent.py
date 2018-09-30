@@ -47,6 +47,21 @@ class TransformerAgent(Agent):
                                 help='')
         agent_args.add_argument('--split_into_sentences', type=bool, default=True,
                                 help='')
+
+        agent_args.add_argument('--max_seq_len', type=int, default=128,
+                                help='')
+        agent_args.add_argument('--beam_size', type=int, default=1,
+                                help='')
+        agent_args.add_argument('--diversity_coef', type=float, default=0,
+                                help='')
+        agent_args.add_argument('--diversity_groups', type=int, default=1,
+                                help='')
+        agent_args.add_argument('--annealing_topk', type=float, default=None,
+                                help='')
+        agent_args.add_argument('--annealing', type=float, default=0.0,
+                                help='')
+        agent_args.add_argument('--length_penalty', type=float, default=0.6,
+                                help='')
         
         return argparser
 
@@ -70,10 +85,24 @@ class TransformerAgent(Agent):
         self.detokenize = self.opt['detokenize']
         self.emoji_prob = self.opt['emoji_prob']
         self.add_questions = self.opt['add_questions']
-        self.beam_size = model_config.beam_size
+        self.beam_size = self.opt['beam_size']
 
         self.clean_emoji = self.opt['clean_emoji']
         self.check_grammar = self.opt['check_grammar']
+
+        # 'max_seq_len': 128,
+        # 'beam_size': 1,
+        # 'diversity_coef': 0,
+        # 'diversity_groups': 1,
+        # 'annealing_topk': None,
+        # 'annealing': 0,
+        # 'length_penalty': 0.6,
+
+        if self.opt['annealing_topk'] is not None:
+            assert self.opt['annealing_topk'] > self.opt['beam_size']
+
+        assert self.opt['diversity_coef'] >= 0
+        assert self.opt['beam_size'] % self.opt['diversity_groups'] == 0
 
         if shared is None:
             self.model = TransformerModel(n_layers=model_config.n_layers,
@@ -88,15 +117,15 @@ class TransformerAgent(Agent):
                                           ff_dropout=model_config.ff_dropout,
                                           bos_id=self.vocab.bos_id,
                                           eos_id=self.vocab.eos_id,
-                                          max_seq_len=model_config.max_seq_len,
-                                          beam_size=model_config.beam_size,  
-                                          length_penalty=model_config.length_penalty,
+                                          max_seq_len=self.opt['max_seq_len'],
+                                          beam_size=self.opt['beam_size'],
+                                          length_penalty=self.opt['length_penalty'],
                                           n_segments=model_config.n_segments,
                                           sample=self.opt['sample'],
-                                          annealing_topk=model_config.annealing_topk,
-                                          annealing=model_config.annealing,
-                                          diversity_coef=model_config.diversity_coef,
-                                          diversity_groups=model_config.diversity_groups)
+                                          annealing_topk=self.opt['annealing_topk'],
+                                          annealing=self.opt['annealing'],
+                                          diversity_coef=self.opt['diversity_coef'],
+                                          diversity_groups=self.opt['diversity_groups'])
             self.retrieval_bot = RetrievalBot()
 
             state_dict = torch.load(model_config.checkpoint_path, map_location=lambda storage, loc: storage)
