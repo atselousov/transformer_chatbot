@@ -112,7 +112,7 @@ class Trainer:
                     logits = self.model.decode(beams[:, b, :-1], enc_contexts)
                     probas = F.log_softmax(logits, dim=-1)
                     probas = torch.gather(probas, -1, beams[:, b, 1:].unsqueeze(-1)).squeeze(-1)
-                    probas = torch.exp(probas.sum(dim=-1) / beam_lens[:, b].float())
+                    probas = probas.sum(dim=-1) / beam_lens[:, b].float()
                     batch_probas.append(probas)
                 batch_probas = torch.stack(batch_probas, dim=-1)
                 batch_probas = F.softmax(batch_probas, dim=-1)
