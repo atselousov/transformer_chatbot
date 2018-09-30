@@ -1,10 +1,11 @@
 # ConvAI2
-# Team: Lost in Conversation /2
+## Team: Lost in Conversation /2
 
 
 ### Links
 
 vocabulary: https://www.dropbox.com/s/n2jbjyq32x6jgr6/parameters.zip?dl=1
+
 model: TODO
 
 ### Team
