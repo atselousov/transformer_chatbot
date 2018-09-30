@@ -16,11 +16,15 @@ def get_model_config():
                        'attn_dropout': default_config.attn_dropout,
                        'ff_dropout': default_config.ff_dropout,
                        'max_seq_len': 128,
-                       'beam_size': 5,
+                       'beam_size': 1,
+                       'diversity_coef': 0,
+                       'diversity_groups': 1, 
                        'sample': False, # only for training, not for agent
-                       'annealing': 0.6,
-                       'length_penalty': 0.8,
+                       'annealing_topk': None,
+                       'annealing': 0,
+                       'length_penalty': 0.6,
                        'n_segments': None,
+                       # agent parameters
                        'replace_repeat': True,
                        'replace_ngram': True,
                        'detokenize': True,
@@ -32,6 +36,12 @@ def get_model_config():
                        'correct_generative': True,
                        'split_into_sentences': True})
 
+    if config.annealing_topk is not None:
+        assert config.annealing_topk > config.beam_size
+    
+    assert config.diversity_coef >= 0
+    assert config.beam_size % config.diversity_groups == 0
+
     return config
 
 
@@ -42,7 +52,7 @@ def get_trainer_config():
                        'lr': 6.25e-5,
                        'lr_warmup': 16000,
                        'lm_weight': 0.5,
-                       'risk_weight': 1,
+                       'risk_weight': 0,
                        'n_jobs': 4,
                        'label_smoothing': 0.1,
                        'clip_grad': None,

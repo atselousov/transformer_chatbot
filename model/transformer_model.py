@@ -9,8 +9,9 @@ from .transformer_module import TransformerModule
 class TransformerModel(nn.Module):
     def __init__(self, n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
                  padding_idx, n_heads, dropout, embed_dropout, attn_dropout, ff_dropout,
-                 bos_id, eos_id, max_seq_len=256, beam_size=5, sample=False, 
-                 length_penalty=0.8, annealing=0, n_segments=None):
+                 bos_id, eos_id, max_seq_len=256, beam_size=5, sample=False,
+                 length_penalty=0.8, annealing_topk=None, annealing=0, 
+                 diversity_coef=0, diversity_groups=1, n_segments=None):
 
         super(TransformerModel, self).__init__()
 
@@ -27,6 +28,9 @@ class TransformerModel(nn.Module):
         self.sample = sample
         self.length_penalty_coef = length_penalty
         self.annealing = annealing
+        self.annealing_topk = annealing_topk
+        self.diversity_coef = diversity_coef
+        self.diversity_groups = diversity_groups
 
         self.transformer_module = TransformerModule(n_layers, n_embeddings, n_pos_embeddings, embeddings_size, 
                                                     padding_idx, n_heads, dropout, embed_dropout, attn_dropout,
@@ -81,6 +85,9 @@ class TransformerModel(nn.Module):
                 beam_enc_contexts.append((c, p))
             
             current_sample_prob = 1
+            group_size = self.beam_size // self.diversity_groups
+            diversity_penalty = torch.zeros((batch_size, self.n_embeddings), device=device)
+
             for i in range(self.max_seq_len):
                 outputs, _ = self.transformer_module(prevs, beam_enc_contexts)
 
@@ -90,24 +97,53 @@ class TransformerModel(nn.Module):
 
                 beam_scores = beam_scores.unsqueeze(-1) + log_probs * (1 - is_end.float().unsqueeze(-1))
                 penalty = self._length_penalty(beam_lens.float() + 1 - is_end.float())
-                penalty = penalty.unsqueeze(-1).repeat(1, 1, log_probs.shape[-1])
+                penalty = penalty.unsqueeze(-1).repeat(1, 1, self.n_embeddings)
                 beam_scores = beam_scores / penalty
 
                 if i == 0:
                     penalty = penalty[:, 0, :]
-                    beam_scores, idxs = beam_scores[:, 0, :].topk(self.beam_size, dim=-1)
+                    beam_scores = beam_scores[:, 0, :]
+
+                    beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)
                     beam_idxs = torch.zeros((batch_size, self.beam_size), dtype=torch.long, device=device)
                 else:
-                    beam_scores = beam_scores.view(batch_size, -1)
+                    penalty = penalty.view(batch_size, self.diversity_groups, group_size, -1)
+                    beam_scores = beam_scores.view(batch_size, self.diversity_groups, group_size, -1)
+
+                    all_scores, all_idxs = [], []
+                    for g in range(self.diversity_groups):
+                        g_beam_scores = beam_scores[:, g, :, :]
+                        g_penalty = penalty[:, g, :, :]
+                        g_beam_scores -= self.diversity_coef * diversity_penalty.unsqueeze(1) / g_penalty
+                        g_beam_scores = g_beam_scores.view(batch_size, -1)
+
+                        if random.random() < current_sample_prob:
+                            beam_probas = F.softmax(g_beam_scores, dim=-1)
+                            if self.annealing_topk is not None:
+                                beam_probas, sample_idxs = beam_probas.topk(self.annealing_topk, dim=-1)
+                                g_idxs = torch.multinomial(beam_probas, group_size)
+                                g_idxs = torch.gather(sample_idxs, 1, g_idxs)
+                            else:
+                                g_idxs = torch.multinomial(beam_probas, group_size)
+                        else:
+                            _, g_idxs = g_beam_scores.topk(group_size, dim=-1)
+                        
+                        g_scores = torch.gather(beam_scores[:, g, :, :].view(batch_size, -1), 1, g_idxs)
+                        g_idxs += g * group_size * self.n_embeddings
+
+                        all_scores.append(g_scores)
+                        all_idxs.append(g_idxs)
+
+                        diversity_penalty.scatter_add_(1, torch.fmod(g_idxs, self.n_embeddings), torch.ones((batch_size, group_size), device=device))
+                     
+                    diversity_penalty.fill_(0)
                     penalty = penalty.view(batch_size, -1)
-                    if random.random() < current_sample_prob:
-                        beam_probas = F.softmax(beam_scores, dim=-1)
-                        idxs = torch.multinomial(beam_probas, self.beam_size)
-                        beam_scores = torch.gather(beam_scores, 1, idxs)
-                    else:
-                        beam_scores, idxs = beam_scores.topk(self.beam_size, dim=-1)               
-                    beam_idxs = (idxs.float() / log_probs.shape[-1]).long()
-                
+                    beam_scores = torch.cat(all_scores, dim=-1)
+                    idxs = torch.cat(all_idxs, dim=-1) 
+
+                    beam_idxs = (idxs.float() / self.n_embeddings).long()
+
+                penalty = torch.gather(penalty, 1, idxs)
                 sym_idxs = torch.fmod(idxs, log_probs.shape[-1])
                 is_end = torch.gather(is_end, 1, beam_idxs)
                 beam_lens = torch.gather(beam_lens, 1, beam_idxs)
@@ -125,7 +161,7 @@ class TransformerModel(nn.Module):
                 if all(is_end.view(-1)):
                     break
                 
-                beam_scores *= torch.gather(penalty, 1, beam_idxs)
+                beam_scores *= penalty
                 current_sample_prob *= self.annealing
 
             predicts = []

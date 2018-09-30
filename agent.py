@@ -23,7 +23,7 @@ class TransformerAgent(Agent):
                                      'available on the device.')
         agent_args.add_argument('--rank_candidates', type='bool', default=False,
                                 help='Whether the model should parse candidates for ranking.')
-        agent_args.add_argument('--sample', type='bool', default=True,
+        agent_args.add_argument('--sample', type='bool', default=False,
                                 help='Sampling of beam from beam search')
         
         return argparser
@@ -71,7 +71,10 @@ class TransformerAgent(Agent):
                                           length_penalty=model_config.length_penalty,
                                           n_segments=model_config.n_segments,
                                           sample=self.opt['sample'],
-                                          annealing=model_config.annealing)
+                                          annealing_topk=model_config.annealing_topk,
+                                          annealing=model_config.annealing,
+                                          diversity_coef=model_config.diversity_coef,
+                                          diversity_groups=model_config.diversity_groups)
             self.retrieval_bot = RetrievalBot()
 
             state_dict = torch.load(model_config.checkpoint_path, map_location=lambda storage, loc: storage)
@@ -157,12 +160,10 @@ class TransformerAgent(Agent):
     def _postprocess_text(self, reply, agent):
         str_reply = self.vocab.ids2string(reply)
 
-        # print('Original reply: ', str_reply)
         if self.replace_repeat:
             str_reply = agent.reply_checker.check_reply(str_reply,
                                                         agent.history['str_dialog'][-1],
                                                         agent.history['str_info'])
-            # print('After repeat replace: ', str_reply)
 
         if self.beam_size > 1 and random.uniform(0, 1) < self.add_questions and '?' not in str_reply:
             question = self.retrieval_bot.generate_question(list(agent.history['str_dialog']),
@@ -170,17 +171,13 @@ class TransformerAgent(Agent):
             if question is not None and question not in str_reply:
                 str_reply = ' '.join([str_reply, question])
 
-        # print('Question: ', question)
-
         if self.replace_ngram:
             str_reply = ngram_replaser(agent.history['str_info'], str_reply, n=self.ngram_size)
-            # print('After ngram replace: ', str_reply)
 
         reply = self.vocab.string2ids(str_reply)
 
         if self.detokenize:
             str_reply = detokenize(str_reply)
-            # print('After detokenize: ', str_reply)
 
         if random.uniform(0, 1) < self.emoji_prob:
             str_reply = ' '.join([str_reply, pick_emoji(str_reply)])

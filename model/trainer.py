@@ -74,18 +74,17 @@ class Trainer:
             enc_contexts = []
 
             # lm loss
-            batch_lm_loss = 0
+            batch_lm_loss = torch.tensor(0, dtype=torch.float, device=self.device)
             for context in contexts:
                 enc_context = self.model.encode(context.clone())
                 enc_contexts.append(enc_context)
-
-                context_outputs = self.model.generate(enc_context[0])
-                ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
-                context.masked_fill_(ignore_mask, self.model.padding_idx)
-                prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
-                batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
-            
-            batch_lm_loss /= len(contexts)
+                
+                if self.lm_weight > 0:
+                    context_outputs = self.model.generate(enc_context[0])
+                    ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
+                    context.masked_fill_(ignore_mask, self.model.padding_idx)
+                    prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
+                    batch_lm_loss += (self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1)) / len(contexts))
 
             # s2s loss
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()
@@ -94,7 +93,7 @@ class Trainer:
             batch_loss = self.criterion(outputs.view(-1, outputs.shape[-1]), nexts.view(-1))
             
             # risk loss
-            batch_risk_loss = torch.tensor(0, device=self.device)
+            batch_risk_loss = torch.tensor(0, dtype=torch.float, device=self.device)
             if risk_func is not None and self.risk_weight > 0:
 
                 beams, beam_lens = self.model.beam_search(enc_contexts, return_beams=True)
@@ -151,18 +150,17 @@ class Trainer:
             enc_contexts = []
 
             # lm loss
-            batch_lm_loss = 0
+            batch_lm_loss = torch.tensor(0, dtype=torch.float, device=self.device)
             for context in contexts:
                 enc_context = self.model.encode(context.clone())
                 enc_contexts.append(enc_context)
 
-                context_outputs = self.model.generate(enc_context[0])
-                ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
-                context.masked_fill_(ignore_mask, self.model.padding_idx)
-                prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
-                batch_lm_loss += self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1))             
-            
-            batch_lm_loss /= len(contexts)
+                if self.lm_weight > 0:
+                    context_outputs = self.model.generate(enc_context[0])
+                    ignore_mask = torch.stack([context == idx for idx in self.ignore_idxs], dim=-1).any(dim=-1)
+                    context.masked_fill_(ignore_mask, self.model.padding_idx)
+                    prevs, nexts = context_outputs[:, :-1, :].contiguous(), context[:, 1:].contiguous()
+                    batch_lm_loss += (self.lm_criterion(prevs.view(-1, prevs.shape[-1]), nexts.view(-1)) / len(contexts))
 
             # s2s loss
             prevs, nexts = targets[:, :-1].contiguous(), targets[:, 1:].contiguous()

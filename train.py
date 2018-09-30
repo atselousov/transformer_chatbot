@@ -34,7 +34,10 @@ def main():
                                    length_penalty=model_config.length_penalty,
                                    n_segments=model_config.n_segments,
                                    sample=model_config.sample,
-                                   annealing=model_config.annealing)
+                                   annealing_topk=model_config.annealing_topk,
+                                   annealing=model_config.annealing,
+                                   diversity_coef=model_config.diversity_coef,
+                                   diversity_groups=model_config.diversity_groups)
 
     if not trainer_config.load_last:
         load_openai_weights(transformer.transformer_module, 
