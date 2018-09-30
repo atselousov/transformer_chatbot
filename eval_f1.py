@@ -8,7 +8,7 @@ if __name__ == '__main__':
                         batchsize=10,
                         rank_candidates=False,
                         sample=False,
-                        uebok_mod=False,
+                        wild_mode=False,
                         replace_repeat=True,
                         replace_ngram=False,
                         detokenize=False,

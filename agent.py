@@ -25,8 +25,8 @@ class TransformerAgent(Agent):
                                 help='Whether the model should parse candidates for ranking.')
         agent_args.add_argument('--sample', type=bool, default=False,
                                 help='Sampling of beam from beam search')
-        agent_args.add_argument('--uebok_mod', type=bool, default=False,
-                                help='https://cs4.pikabu.ru/images/big_size_comm/2014-10_4/14135339629138.jpg')
+        agent_args.add_argument('--wild_mode', type=bool, default=False,
+                                help='')
         agent_args.add_argument('--replace_repeat', type=bool, default=True,
                                 help='')
         agent_args.add_argument('--replace_ngram', type=bool, default=True,
@@ -132,6 +132,10 @@ class TransformerAgent(Agent):
         dialog = []
         for subtext in text.split('\n'):
             subtext = subtext.strip()
+            
+            if self.opt['wild_mode'] and len(self.history['info']) == 0 and len(self.history['dialog']) == 0:
+                subtext = 'your persona: ' + subtext
+
             if subtext.startswith('your persona:'):
                 subtext = subtext.replace('your persona:', '').strip()
                 subtext = self._preprocess_text(subtext).strip()

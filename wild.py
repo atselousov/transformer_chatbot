@@ -6,7 +6,7 @@ from agent import TransformerAgent
 def main():
     parser = ParlaiParser(True, True)
     parser.set_defaults(batchsize=10,
-                        uebok_mod=True)
+                        wild_mode=True)
 
     ConvAIWorld.add_cmdline_args(parser)
     TransformerAgent.add_cmdline_args(parser)
