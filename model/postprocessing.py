@@ -8,10 +8,18 @@ import difflib
 import random
 from .retrieval import RetrievalBot
 import re
+import numpy as np
 
 
 SPELL_EXCEPTIONS = ['lol']
-STANDARD_ANSWERS = ['i think you are interesting person. tell me something about yourself.']
+STANDARD_ANSWERS = ['do you wanna talk about something else? ',
+                    'tell me something else about yourself.',
+                    'it is interesting. how is it outside?',
+                    'do you like walking outside?',
+                    'cats... do you like cats!',
+                    'how do you spend your free time?',
+                    'how do you usually spend your weekend?',
+                    'i think you are interesting person. tell me something about yourself.']
 
 
 def syntax_fix(text):
@@ -55,6 +63,11 @@ class ReplyChecker:
         self._info = None
         self._max_len = max_len
 
+        self._reset_prob()
+
+    def _reset_prob(self):
+        self._def_prob = np.ones(len(STANDARD_ANSWERS)) / len(STANDARD_ANSWERS)
+
     def _ratio(self, seq1, seq2):
         # todo: only works good for same sequences
         return difflib.SequenceMatcher(None, seq1, seq2).ratio()
@@ -75,7 +88,15 @@ class ReplyChecker:
                 self._info = self._retrieval.get_reply_info(info)
 
             if not self._info:
-                return random.choice(STANDARD_ANSWERS)
+                idx = np.random.choice(range(len(STANDARD_ANSWERS)), p=self._def_prob)
+                self._def_prob[idx] = 0
+
+                if np.sum(self._def_prob) == 0:
+                    self._reset_prob()
+                else:
+                    self._def_prob /= np.sum(self._def_prob)
+
+                return STANDARD_ANSWERS[idx]
 
             res = random.choice(list(self._info.keys()))
             del self._info[res]
@@ -98,6 +119,7 @@ class ReplyChecker:
     def clean(self):
         self._info = None
         self._replies = deque([], maxlen=self._max_len)
+        self._reset_prob()
 
 
 def get_syn(seq):
