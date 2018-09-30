@@ -1,5 +1,11 @@
-spacy
-numpy
-scipy
-tqdm
-ftfy
+pytorch==0.4.1
+parlai==0.1.0
+spacy==2.0.12
+numpy==1.14.5
+scipy==1.0.0
+tqdm==4.23.2
+ftfy==0.16.0
+elasticsearch==6.3.1
+nltk==3.2.5
+emoji==0.5.0
+mosestokenizer==1.0.0
