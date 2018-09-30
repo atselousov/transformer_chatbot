@@ -1,0 +1,5 @@
+spacy
+numpy
+scipy
+tqdm
+ftfy
