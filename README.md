@@ -6,7 +6,7 @@
 
 vocabulary: https://www.dropbox.com/s/n2jbjyq32x6jgr6/parameters.zip?dl=1
 
-model: TODO
+model: https://www.dropbox.com/s/d6pnsjwfpl238k8/last_checkpoint?dl=1
 
 ### Team
 
@@ -33,6 +33,6 @@ List of used python modules is in `requirements.txt`. Also `pytorch=0.4.1` is us
 
 ### Metrics
 
-f1: ?
+f1: 0.1712
 
-hits: ?
+hits@1: 0.174
