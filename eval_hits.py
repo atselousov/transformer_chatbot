@@ -18,7 +18,7 @@ if __name__ == '__main__':
                         check_grammar=True,
                         correct_generative=True,
                         split_into_sentences=True,
-                        max_seq_len=128,
+                        max_seq_len=256,
                         beam_size=3,
                         annealing_topk=None,
                         annealing=0,

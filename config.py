@@ -15,7 +15,7 @@ def get_model_config():
                        'embed_dropout': default_config.embed_dropout,
                        'attn_dropout': default_config.attn_dropout,
                        'ff_dropout': default_config.ff_dropout,
-                       'max_seq_len': 128,
+                       'max_seq_len': 256,
                        'beam_size': 3,
                        'diversity_coef': 0,
                        'diversity_groups': 1,
