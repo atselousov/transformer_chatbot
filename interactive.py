@@ -11,18 +11,17 @@ if __name__ == '__main__':
                         replace_ngram=True,
                         detokenize=True,
                         emoji_prob=0.3,
-                        add_questions=0.3,
+                        add_questions=0.4,
                         clean_emoji=True,
                         check_grammar=True,
                         correct_generative=True,
                         split_into_sentences=True,
 
                         max_seq_len=256,
-                        beam_size=5,
+                        beam_size=3,
                         annealing_topk=None,
                         annealing=0.6,
-                        length_penalty=0.2,
-                        )
+                        length_penalty=0.7)
 
     opt = parser.parse_args()
     interactive(opt)
