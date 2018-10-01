@@ -38,4 +38,4 @@ List of used python modules is in `requirements.txt`. Also `pytorch=0.4.1` is us
 
 f1: 0.178
 
-hits@1: 0.174
+hits@1: 0.173
