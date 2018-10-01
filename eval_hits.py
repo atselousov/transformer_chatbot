@@ -17,7 +17,12 @@ if __name__ == '__main__':
                         clean_emoji=True,
                         check_grammar=True,
                         correct_generative=True,
-                        split_into_sentences=True)
+                        split_into_sentences=True,
+                        max_seq_len=128,
+                        beam_size=3,
+                        annealing_topk=None,
+                        annealing=0,
+                        length_penalty=0.6)
     opt = parser.parse_args()
     eval_hits(opt, print_parser=parser)
 
