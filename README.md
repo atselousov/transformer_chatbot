@@ -20,19 +20,17 @@ Unzip BPE vocabulary files into `./parametes` folder and save checkpoint into
 
 The easiest way to prepare environment is to run script `prepare_environment.sh`.
 After that docker container with retrieval server must be run in demon mode and 
-image with `transformer_chatbot` must be built.
+image with `transformer_chatbot` must be built. Run scripts from the root folder of this repository.
 
 Retrieval server can be run with script `run_retrieval_servet.sh`. 
 Server do not need the internet connection for its work, for connection with 
 `transformer_chatbot` port `9200` is used (containers must be in the same docker network).   
 
 After preparations metrics can be evaluated with corresponding `docker_*.sh` scripts or
-`*.py` scripts can be used in interactive container run.
-
-Run scripts from the root folder of this repository. 
+`*.py` scripts can be used in interactive container run. 
 
 Usage of docker container for `transformer_chatbot` is not necessary, but 
-retrieval server must olways be run for correct work of `transformer_chatbot`.
+retrieval server must always be run for correct work of `transformer_chatbot`.
 
 List of used python modules is in `requirements.txt`. Also `pytorch=0.4.1` is used.
 
