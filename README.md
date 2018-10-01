@@ -6,7 +6,7 @@
 
 BPE vocabulary: https://www.dropbox.com/s/n2jbjyq32x6jgr6/parameters.zip?dl=1
 
-Model checkpoint file: https://www.dropbox.com/s/d6pnsjwfpl238k8/last_checkpoint?dl=1
+Model checkpoint file: https://www.dropbox.com/s/cs6zd9yntn6ixea/last_checkpoint?dl=1
 
 ### Team
 
@@ -38,6 +38,6 @@ List of used python modules is in `requirements.txt`. Also `pytorch=0.4.1` is us
 
 ### Metrics
 
-f1: 0.1712
+f1: 0.178
 
 hits@1: 0.174
