@@ -1,0 +1,6 @@
+.idea/*
+.ropeproject/*
+*__pycache__*
+checkpoints/*
+parameters/*
+ParlAI/*
