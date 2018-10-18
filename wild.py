@@ -1,4 +1,4 @@
-from convai_world import ConvAIWorld
+from ParlAI.projects.convai.convai_world import ConvAIWorld
 from parlai.core.params import ParlaiParser
 from agent import TransformerAgent
 
@@ -7,7 +7,7 @@ def main():
     parser = ParlaiParser(True, True)
     parser.set_defaults(batchsize=10,
                         sample=True,
-                        wild_mode=True,
+                        wild_mode=False,
                         replace_repeat=True,
                         replace_ngram=True,
                         detokenize=True,
