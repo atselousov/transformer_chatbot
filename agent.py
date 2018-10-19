@@ -281,6 +281,7 @@ class TransformerAgent(Agent):
 
                 valid_observations[i]['agent'].history['dialog'].extend([self.vocab.talker2_bos_id] + pred_text)
                 batch_reply[valid_ids[i]]['text'] = pred_text_str
+                batch_reply[valid_ids[i]]['episode_done'] = valid_observations[i]['agent'].episode_done
 
             if self.opt['rank_candidates']:
                 candidates = [list(obs.get('label_candidates', [])) for obs in valid_observations]
