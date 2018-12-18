@@ -1,6 +1,7 @@
 # ConvAI2
 ## Team: Lost in Conversation /2
 
+NeurIPS 2018 [presentation](docs/slides.pdf).
 
 ### Links
 
@@ -27,7 +28,7 @@ Server do not need the internet connection for its work, for connection with
 `transformer_chatbot` port `9200` is used (containers must be in the same docker network).   
 
 After preparations metrics can be evaluated with corresponding `docker_*.sh` scripts or
-`*.py` scripts can be used in interactive container run. 
+`*.py` scripts can be used during interactive container run. 
 
 Usage of docker container for `transformer_chatbot` is not necessary, but 
 retrieval server must always be run for correct work of `transformer_chatbot`.
