@@ -21,6 +21,18 @@ import torch.nn.functional as F
 from .utils import checkpoint_sequential
 
 
+DEBUG = True
+
+
+def my_print(string, pref=None):
+    
+    if pref is not None:
+        string = pref + string
+    if DEBUG:
+        print(string)
+    
+
+
 class MultiheadAttention(nn.Module):
     @classmethod
     def _get_future_mask(cls, size, device):
@@ -31,9 +43,11 @@ class MultiheadAttention(nn.Module):
 
         return mask
 
-    def __init__(self, n_features, n_heads, dropout):
+    def __init__(self, n_features, n_heads, dropout, layer_num=None):
         super(MultiheadAttention, self).__init__()
         assert n_features % n_heads == 0
+        
+        self.layer_num = layer_num
 
         self.n_features = n_features
         self.n_heads = n_heads
@@ -48,13 +62,24 @@ class MultiheadAttention(nn.Module):
         nn.init.normal_(self.out_proj.weight, std=0.02)
 
     def _split_heads(self, x, is_key=False):
+        my_print(f'_split_heads | input x size: x (batch_size, seq_len, num_features) {x.size()}', self.pref())
+        # x (batch_size, seq_len, num_features)
         x = x.view(x.shape[0], x.shape[1], self.n_heads, self.n_features // self.n_heads)
+        my_print(f'_split_heads | view x size: x (batch_size, seq_len, self.n_heads, num_features // self.n_heads) {x.size()}', self.pref())
+        # x (batch_size, seq_len, self.n_heads, num_features // self.n_heads)
         x = x.permute(0, 2, 3, 1) if is_key else x.permute(0, 2, 1, 3)
+        my_print(f'_split_heads | permute x size: {x.size()}', self.pref())
 
         return x
 
-    def _attn(self, q, k, v, apply_future_mask=True, padding_mask=None):
+    def _attn(self, q, k, v, apply_future_mask=True, padding_mask=None, dump=None):
+        my_print(f'_attn | q size: {q.size()}', self.pref())
+        my_print(f'_attn | k size: {k.size()}', self.pref())
+        my_print(f'_attn | v size: {v.size()}', self.pref())
+        
         w = torch.matmul(q, k) / math.sqrt(self.n_features // self.n_heads)
+        
+        my_print(f'_attn | w = q * k: {w.size()}', self.pref())
 
         if apply_future_mask:
             future_mask = MultiheadAttention._get_future_mask(w.shape[-2:], w.device).unsqueeze(0).unsqueeze(0)
@@ -68,20 +93,43 @@ class MultiheadAttention(nn.Module):
 
         if padding_mask is not None:
             w.masked_fill_(padding_mask.all(dim=-1).unsqueeze(1).unsqueeze(2).unsqueeze(3), 0)
-
+           
+        if dump is not None:
+            my_print('dump is not none', self.pref())
+            dump.append((self.layer_num, self.run_i, w.cpu()))
+        else:
+            my_print('None', self.pref())
+            
+        my_print(f'w_size{w.size()}', self.pref())
+        my_print(f'v_size{v.size()}', self.pref())
+            
         out = torch.matmul(w, v)
 
         return out
 
     def _merge_heads(self, x):
+        my_print(f'_merge_heads | input x size: {x.size()}', self.pref())
         x = x.permute(0, 2, 1, 3).contiguous()
+        my_print(f'_merge_heads | permute x size: {x.size()}', self.pref())
         x = x.view(x.shape[0], x.shape[1], self.n_features)
-
+        my_print(f'_merge_heads | view x size: {x.size()}', self.pref())
+        
         return x
+    
+    def pref(self):
+         return f'layer_num: {self.layer_num} | run_i: {self.run_i} | '
 
-    def forward(self, query, key, value, padding_mask):
+    def forward(self, query, key, value, padding_mask, dump=None, run_i=None):
+        self.run_i = run_i
+        
         qkv_same = (query.data_ptr() == key.data_ptr() == value.data_ptr())
         kv_same = (key.data_ptr() == value.data_ptr())
+        
+        my_print(f'- q_size: {query.size()}', self.pref())
+        my_print(f'- k_size: {key.size()}', self.pref())
+        my_print(f'- v_size: {value.size()}', self.pref())
+        my_print(f'- qkv_same: {qkv_same}', self.pref())
+        my_print(f'- kv_same: {kv_same}', self.pref())
 
         if qkv_same:
             query, key, value = self.qkv_proj(query).split(self.n_features, dim=-1)
@@ -94,12 +142,20 @@ class MultiheadAttention(nn.Module):
             apply_future_mask = False
         else:
             assert False
-
+        
+        my_print(f'+ q_size: {query.size()}', self.pref())
         query = self._split_heads(query)
+        my_print(f'= q_size: {query.size()}', self.pref())
+        
+        my_print(f'+ k_size: {key.size()}', self.pref())
         key = self._split_heads(key, is_key=True)
+        my_print(f'= k_size: {key.size()}', self.pref())
+        
+        my_print(f'+ v_size: {value.size()}', self.pref())
         value = self._split_heads(value)
-
-        x = self._attn(query, key, value, apply_future_mask, padding_mask)
+        my_print(f'= v_size: {value.size()}', self.pref())
+        
+        x = self._attn(query, key, value, apply_future_mask, padding_mask, dump=dump)
         x = self._merge_heads(x)
 
         x = self.out_proj(x)
@@ -134,17 +190,20 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, n_features, n_heads, dropout, attn_dropout, ff_dropout):
+    def __init__(self, n_features, n_heads, dropout, attn_dropout, ff_dropout, layer_num=None):
         super(TransformerBlock, self).__init__()
-
-        self.attn = MultiheadAttention(n_features, n_heads, attn_dropout)
+        self.layer_num = layer_num
+        
+        self.attn = MultiheadAttention(n_features, n_heads, attn_dropout, layer_num=self.layer_num)
         self.attn_norm = nn.LayerNorm(n_features)
         self.ff = FeedForward(n_features, 4 * n_features, ff_dropout)
         self.ff_norm = nn.LayerNorm(n_features)
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x, padding_mask, *contexts):
+    def forward(self, x, padding_mask, *contexts, dump=None):
         '''contexts = [(context1, padding_mask1), ...]'''
+        
+#         my_print(f'layer_num: {self.layer_num}')
 
         inputs = (x, padding_mask) + contexts
 
@@ -152,7 +211,7 @@ class TransformerBlock(nn.Module):
         n_attn = len(inputs) // 2
         for i in range(0, len(inputs), 2):
             c, m = inputs[i], inputs[i+1].byte()
-            a = self.attn(x, c, c, m)
+            a = self.attn(x, c, c, m, dump=dump, run_i=i//2)
             full_attn += (a / n_attn)
 
         full_attn = self.dropout(full_attn)
@@ -174,7 +233,7 @@ class TransformerModule(nn.Module):
         self.embeddings = nn.Embedding(n_embeddings, embeddings_size, padding_idx=padding_idx)
         self.pos_embeddings = nn.Embedding(n_pos_embeddings + 1, embeddings_size, padding_idx=0)
         self.embed_dropout = nn.Dropout(embed_dropout)
-        self.layers = nn.ModuleList([TransformerBlock(embeddings_size, n_heads, dropout, attn_dropout, ff_dropout) for _ in range(n_layers)])
+        self.layers = nn.ModuleList([TransformerBlock(embeddings_size, n_heads, dropout, attn_dropout, ff_dropout, layer_num=i) for i in range(n_layers)])
         self.n_segments = n_segments        
         
         self._init_weights()
@@ -183,7 +242,7 @@ class TransformerModule(nn.Module):
         nn.init.normal_(self.embeddings.weight, std=0.02)
         nn.init.normal_(self.pos_embeddings.weight, std=0.02)
 
-    def forward(self, x, enc_contexts=[]):
+    def forward(self, x, enc_contexts=[], dump=None):
         padding_mask = x.eq(self.embeddings.padding_idx)
 
         positions = torch.cumsum(~padding_mask, dim=-1, dtype=torch.long)
@@ -201,7 +260,7 @@ class TransformerModule(nn.Module):
             x = out[0]
         else:
             for layer in self.layers:
-                out = layer(x, padding_mask, *enc_contexts)
+                out = layer(x, padding_mask, *enc_contexts, dump=dump)
                 x = out[0]
         
         return x, padding_mask

@@ -64,8 +64,8 @@ class TransformerModel(nn.Module):
     def generate(self, enc_x):
         return self.pre_softmax(enc_x)
 
-    def decode(self, x, enc_contexts=[]):
-        x, _ = self.transformer_module(x, enc_contexts)
+    def decode(self, x, enc_contexts=[], dump=None):
+        x, _ = self.transformer_module(x, enc_contexts, dump=dump)
         return self.generate(x)
 
     def predict(self, contexts=[]):
