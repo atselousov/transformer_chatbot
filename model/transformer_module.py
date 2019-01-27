@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from .utils import checkpoint_sequential
 
 
-DEBUG = True
+DEBUG = False
 
 
 def my_print(string, pref=None):
