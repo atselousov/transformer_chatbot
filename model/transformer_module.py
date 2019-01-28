@@ -21,18 +21,6 @@ import torch.nn.functional as F
 from .utils import checkpoint_sequential
 
 
-DEBUG = False
-
-
-def my_print(string, pref=None):
-    
-    if pref is not None:
-        string = pref + string
-    if DEBUG:
-        print(string)
-    
-
-
 class MultiheadAttention(nn.Module):
     @classmethod
     def _get_future_mask(cls, size, device):
@@ -62,25 +50,16 @@ class MultiheadAttention(nn.Module):
         nn.init.normal_(self.out_proj.weight, std=0.02)
 
     def _split_heads(self, x, is_key=False):
-        my_print(f'_split_heads | input x size: x (batch_size, seq_len, num_features) {x.size()}', self.pref())
         # x (batch_size, seq_len, num_features)
         x = x.view(x.shape[0], x.shape[1], self.n_heads, self.n_features // self.n_heads)
-        my_print(f'_split_heads | view x size: x (batch_size, seq_len, self.n_heads, num_features // self.n_heads) {x.size()}', self.pref())
         # x (batch_size, seq_len, self.n_heads, num_features // self.n_heads)
         x = x.permute(0, 2, 3, 1) if is_key else x.permute(0, 2, 1, 3)
-        my_print(f'_split_heads | permute x size: {x.size()}', self.pref())
 
         return x
 
     def _attn(self, q, k, v, apply_future_mask=True, padding_mask=None, dump=None):
-        my_print(f'_attn | q size: {q.size()}', self.pref())
-        my_print(f'_attn | k size: {k.size()}', self.pref())
-        my_print(f'_attn | v size: {v.size()}', self.pref())
-        
         w = torch.matmul(q, k) / math.sqrt(self.n_features // self.n_heads)
         
-        my_print(f'_attn | w = q * k: {w.size()}', self.pref())
-
         if apply_future_mask:
             future_mask = MultiheadAttention._get_future_mask(w.shape[-2:], w.device).unsqueeze(0).unsqueeze(0)
             w.masked_fill_(future_mask, float('-inf'))
@@ -95,24 +74,15 @@ class MultiheadAttention(nn.Module):
             w.masked_fill_(padding_mask.all(dim=-1).unsqueeze(1).unsqueeze(2).unsqueeze(3), 0)
            
         if dump is not None:
-            my_print('dump is not none', self.pref())
             dump.append((self.layer_num, self.run_i, w.cpu()))
-        else:
-            my_print('None', self.pref())
-            
-        my_print(f'w_size{w.size()}', self.pref())
-        my_print(f'v_size{v.size()}', self.pref())
             
         out = torch.matmul(w, v)
 
         return out
 
     def _merge_heads(self, x):
-        my_print(f'_merge_heads | input x size: {x.size()}', self.pref())
         x = x.permute(0, 2, 1, 3).contiguous()
-        my_print(f'_merge_heads | permute x size: {x.size()}', self.pref())
         x = x.view(x.shape[0], x.shape[1], self.n_features)
-        my_print(f'_merge_heads | view x size: {x.size()}', self.pref())
         
         return x
     
@@ -125,12 +95,6 @@ class MultiheadAttention(nn.Module):
         qkv_same = (query.data_ptr() == key.data_ptr() == value.data_ptr())
         kv_same = (key.data_ptr() == value.data_ptr())
         
-        my_print(f'- q_size: {query.size()}', self.pref())
-        my_print(f'- k_size: {key.size()}', self.pref())
-        my_print(f'- v_size: {value.size()}', self.pref())
-        my_print(f'- qkv_same: {qkv_same}', self.pref())
-        my_print(f'- kv_same: {kv_same}', self.pref())
-
         if qkv_same:
             query, key, value = self.qkv_proj(query).split(self.n_features, dim=-1)
             apply_future_mask = True  # self-attention
@@ -143,17 +107,11 @@ class MultiheadAttention(nn.Module):
         else:
             assert False
         
-        my_print(f'+ q_size: {query.size()}', self.pref())
         query = self._split_heads(query)
-        my_print(f'= q_size: {query.size()}', self.pref())
         
-        my_print(f'+ k_size: {key.size()}', self.pref())
         key = self._split_heads(key, is_key=True)
-        my_print(f'= k_size: {key.size()}', self.pref())
         
-        my_print(f'+ v_size: {value.size()}', self.pref())
         value = self._split_heads(value)
-        my_print(f'= v_size: {value.size()}', self.pref())
         
         x = self._attn(query, key, value, apply_future_mask, padding_mask, dump=dump)
         x = self._merge_heads(x)
@@ -203,8 +161,6 @@ class TransformerBlock(nn.Module):
     def forward(self, x, padding_mask, *contexts, dump=None):
         '''contexts = [(context1, padding_mask1), ...]'''
         
-#         my_print(f'layer_num: {self.layer_num}')
-
         inputs = (x, padding_mask) + contexts
 
         full_attn = 0
