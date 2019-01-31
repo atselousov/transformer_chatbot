@@ -279,7 +279,9 @@ class TransformerAgent(Agent):
             for i in range(batch_size):
                 pred_text_str, pred_text = self._postprocess_text(pred_texts[i], valid_observations[i]['agent'])
 
-                valid_observations[i]['agent'].history['dialog'].extend([self.vocab.talker2_bos_id] + pred_text)
+                valid_observations[i]['agent'].history['dialog'].extend([self.vocab.talker2_bos_id] +
+                                                                        pred_text +
+                                                                        [self.vocab.talker2_eos_id])
                 batch_reply[valid_ids[i]]['text'] = pred_text_str
                 batch_reply[valid_ids[i]]['episode_done'] = valid_observations[i]['agent'].episode_done
 
