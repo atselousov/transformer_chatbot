@@ -34,7 +34,7 @@ class Trainer:
         self.lm_criterion = nn.CrossEntropyLoss(ignore_index=self.model.padding_idx).to(device)
         self.criterion = LabelSmoothingLoss(n_labels=self.model.n_embeddings, smoothing=label_smoothing, ignore_index=self.model.padding_idx).to(device)
         base_optimizer = Adam(self.model.parameters(), lr=lr, weight_decay=0.01)
-        self.optimizer = NoamOpt(self.model.embeddings_size, 1, lr_warmup, base_optimizer)
+        self.optimizer = NoamOpt(self.model.embeddings_size, lr, lr_warmup, base_optimizer)
 
         self.train_dataloader = DataLoader(train_dataset, batch_size=batch_size//batch_split, shuffle=True, 
                                            num_workers=n_jobs, collate_fn=self.collate_func)
