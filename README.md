@@ -12,7 +12,7 @@ Model checkpoint file: https://www.dropbox.com/s/cs6zd9yntn6ixea/last_checkpoint
 ### Team
 
 * Alexander Tselousov aleksander.tselousov@yandex.ru
-* Sergey Golovanov sergey.golovanov@neuromation.io
+* Sergey Golovanov sergey_xg@mail.ru
 
 ### How to run
 
