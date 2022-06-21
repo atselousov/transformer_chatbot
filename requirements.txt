@@ -1,5 +1,5 @@
 spacy==2.0.12
-numpy==1.14.5
+numpy==1.22.0
 scipy==1.0.0
 tqdm==4.23.2
 ftfy==5.5.0
